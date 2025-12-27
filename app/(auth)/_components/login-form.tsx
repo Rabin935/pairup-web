@@ -6,10 +6,12 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoginSchema, LoginValues } from "@/app/lib/validations/login-auth";
+import { useRouter } from "next/navigation";
 
 
 export default function LoginForm() {
     const [showPassword, setShowPassword] = useState(false);
+    const router = useRouter();
 
     const {
         register,
@@ -25,7 +27,8 @@ export default function LoginForm() {
 
     const onSubmit = async (values: LoginValues) => {
         console.log("Submit logic:", values);
-        // Add your login logic here
+        router.push("/dashboard"); 
+        router.refresh();
     };
 
     return (

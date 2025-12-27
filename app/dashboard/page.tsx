@@ -1,5 +1,5 @@
 export default function Dashboard() {
     return (
-        <div className="dark:bg-white"></div>
+        <div className="min-h-screen bg-white text-white p-8"></div>
     );
 }
