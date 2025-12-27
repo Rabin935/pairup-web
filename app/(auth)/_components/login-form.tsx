@@ -99,7 +99,7 @@ export default function LoginForm() {
 
                 <p className="text-center text-sm text-gray-600 mt-6">
                     Not a member yet?{" "}
-                    <Link href="/signup" className="text-[#8B5CF6] font-bold hover:underline">
+                    <Link href="/register" className="text-[#8B5CF6] font-bold hover:underline">
                         Join now
                     </Link>
                 </p>
