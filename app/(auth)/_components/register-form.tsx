@@ -18,7 +18,8 @@ export default function RegisterForm() {
     } = useForm<RegisterValues>({
         resolver: zodResolver(RegisterSchema),
         defaultValues: {
-            name: "",
+            firstname: "",
+            lastname: "",
             email: "",
             number: "",
             password: "",
@@ -63,14 +64,40 @@ export default function RegisterForm() {
                 {/* Inputs */}
                 <div className="space-y-4">
                     {/* Name Field */}
-                    <div>
-                        <input
-                            {...register("name")}
-                            placeholder="Full Name"
-                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
-                                }`}
-                        />
-                        {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name?.message}</p>}
+                    <div className="flex gap-3">
+                        {/* First Name */}
+                        <div className="w-1/2">
+                            <input
+                                {...register("firstname")}
+                                placeholder="First Name"
+                                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.firstname
+                                        ? "border-red-500 focus:ring-red-500"
+                                        : "border-gray-300 focus:ring-gray-400"
+                                    }`}
+                            />
+                            {errors.firstname && (
+                                <p className="text-red-500 text-xs mt-1">
+                                    {errors.firstname.message}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Last Name */}
+                        <div className="w-1/2">
+                            <input
+                                {...register("lastname")}
+                                placeholder="Last Name"
+                                className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.lastname
+                                        ? "border-red-500 focus:ring-red-500"
+                                        : "border-gray-300 focus:ring-gray-400"
+                                    }`}
+                            />
+                            {errors.lastname && (
+                                <p className="text-red-500 text-xs mt-1">
+                                    {errors.lastname.message}
+                                </p>
+                            )}
+                        </div>
                     </div>
 
                     {/* Email Field */}
@@ -94,8 +121,8 @@ export default function RegisterForm() {
                                 {...register("number")}
                                 placeholder="98XXXXXXXX"
                                 className={`w-full px-4 py-3 border rounded-r-lg focus:outline-none focus:ring-1 text-black ${errors.number
-                                        ? "border-red-500 focus:ring-red-500"
-                                        : "border-gray-300 focus:ring-gray-400"
+                                    ? "border-red-500 focus:ring-red-500"
+                                    : "border-gray-300 focus:ring-gray-400"
                                     }`}
                             />
                         </div>
