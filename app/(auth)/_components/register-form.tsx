@@ -28,7 +28,7 @@ export default function RegisterForm() {
 
     const onSubmit = async (values: RegisterValues) => {
         console.log("Registering...", values);
-        router.push("/dashboard"); 
+        router.push("/dashboard");
         router.refresh();
     };
 
@@ -40,7 +40,7 @@ export default function RegisterForm() {
 
             <h1 className="text-3xl font-bold text-black mb-8">Create an Account</h1>
 
-            
+
 
             <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
 
@@ -59,7 +59,7 @@ export default function RegisterForm() {
                     <span className="flex-shrink mx-4 text-sm font-bold text-black uppercase">OR</span>
                     <div className="flex-grow border-t border-gray-200"></div>
                 </div>
-                
+
                 {/* Inputs */}
                 <div className="space-y-4">
                     {/* Name Field */}
@@ -67,9 +67,8 @@ export default function RegisterForm() {
                         <input
                             {...register("name")}
                             placeholder="Full Name"
-                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${
-                                errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
-                            }`}
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
+                                }`}
                         />
                         {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name?.message}</p>}
                     </div>
@@ -79,11 +78,32 @@ export default function RegisterForm() {
                         <input
                             {...register("email")}
                             placeholder="Enter your email"
-                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${
-                                errors.email ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
-                            }`}
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.email ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
+                                }`}
                         />
                         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email?.message}</p>}
+                    </div>
+
+                    {/* Phone Number Field */}
+                    <div>
+                        <div className="flex">
+                            <span className="flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-100 text-black text-sm">
+                                +977
+                            </span>
+                            <input
+                                {...register("number")}
+                                placeholder="98XXXXXXXX"
+                                className={`w-full px-4 py-3 border rounded-r-lg focus:outline-none focus:ring-1 text-black ${errors.number
+                                        ? "border-red-500 focus:ring-red-500"
+                                        : "border-gray-300 focus:ring-gray-400"
+                                    }`}
+                            />
+                        </div>
+                        {errors.number && (
+                            <p className="text-red-500 text-xs mt-1">
+                                {errors.number.message}
+                            </p>
+                        )}
                     </div>
 
                     {/* Password Field */}
@@ -92,9 +112,8 @@ export default function RegisterForm() {
                             {...register("password")}
                             type={showPassword ? "text" : "password"}
                             placeholder="Password"
-                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${
-                                errors.password ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
-                            }`}
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.password ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
+                                }`}
                         />
                         <button
                             type="button"
@@ -112,9 +131,8 @@ export default function RegisterForm() {
                             {...register("confirmPassword")}
                             type={showPassword ? "text" : "password"}
                             placeholder="Confirm Password"
-                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${
-                                errors.confirmPassword ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
-                            }`}
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.confirmPassword ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
+                                }`}
                         />
                         {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword?.message}</p>}
                     </div>
