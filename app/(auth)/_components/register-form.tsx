@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { RegisterSchema, RegisterValues } from "@/app/lib/validations/register-auth";
+import axiosInstance from "@/lib/api/axios";
 
 export default function RegisterForm() {
     const [showPassword, setShowPassword] = useState(false);
@@ -17,20 +18,31 @@ export default function RegisterForm() {
         formState: { errors, isSubmitting },
     } = useForm<RegisterValues>({
         resolver: zodResolver(RegisterSchema),
-        defaultValues: {
-            firstname: "",
-            lastname: "",
-            email: "",
-            number: "",
-            password: "",
-            confirmPassword: "",
-        },
+        mode: "onSubmit",
+        
     });
 
+    const [pending, setTransition] = useTransition();
     const onSubmit = async (values: RegisterValues) => {
-        console.log("Registering...", values);
-        router.push("/dashboard");
-        router.refresh();
+        setError(null);
+        setTransition(async() => {
+            try {
+
+                const response = await handleRegister(values);
+                if (!response.success) {
+                    throw new Error(response.message);
+                }
+                if (response.success) {
+                    router.push("/login");
+                } else {
+                    setError('Registration failed');
+                }
+
+            } catch (err: Error | any) {
+                setError(err.message || 'Registration failed');
+            }
+        })
+        
     };
 
     return (
@@ -182,3 +194,11 @@ export default function RegisterForm() {
         </div>
     );
 }
+
+function setError(arg0: any) {
+    throw new Error("Function not implemented.");
+}
+function handleRegister(values: { firstname: string; lastname: string; email: string; number: string; password: string; confirmPassword: string; }) {
+    throw new Error("Function not implemented.");
+}
+
