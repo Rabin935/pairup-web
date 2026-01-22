@@ -1,35 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LoginSchema, LoginValues } from "@/app/lib/validations/login-auth";
 import { useRouter } from "next/navigation";
+import { LoginData, loginSchema } from "../schema";
+import { handleLogin } from "@/lib/actions/auth-action";
 
 
 export default function LoginForm() {
     const [showPassword, setShowPassword] = useState(false);
-    const router = useRouter();
+  const router = useRouter();
+  const [pending, setTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
-    const {
-        register,
-        handleSubmit,
-        formState: { errors, isSubmitting },
-    } = useForm<LoginValues>({
-        resolver: zodResolver(LoginSchema),
-        defaultValues: {
-            email: "",
-            password: "",
-        },
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginData>({
+    resolver: zodResolver(loginSchema),
+    mode: "onSubmit",
+  });
+
+  const onSubmit = async (values: LoginData) => {
+    setError(null);
+
+    setTransition(async () => {
+      try {
+        const response = await handleLogin(values);
+
+        if (!response.success) {
+          throw new Error(response.message);
+        }
+
+        // Optional: Save token in localStorage or cookies
+        if (response.token) {
+          localStorage.setItem("token", response.token);
+        }
+
+        // Redirect to dashboard
+        router.push("/dashboard");
+      } catch (err: any) {
+        setError(err.message || "Login failed");
+      }
     });
-
-    const onSubmit = async (values: LoginValues) => {
-        console.log("Submit logic:", values);
-        router.push("/dashboard"); 
-        router.refresh();
-    };
+  };
 
     return (
         <div className="flex flex-col items-center w-full ">
