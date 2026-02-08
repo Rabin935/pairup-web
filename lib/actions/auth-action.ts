@@ -24,21 +24,59 @@ export const handleRegister = async (data: RegisterData) => {
 
 export const handleLogin = async (data: LoginData) => {
     try {
+        console.log('handleLogin called with:', data);
         const response = await login(data)
-        if (response.success) {
-            await setAuthToken(response.token)
-            await setUserData(response.data)
-            return {
-                success: true,
-                message: 'Login successful',
-                data: response.data
+        console.log('handleLogin raw response:', response);
+        console.log('response.success:', response.success);
+        console.log('response.token exists:', !!response.token);
+        console.log('response.data exists:', !!response.data);
+        
+        // Handle backend response format: { success, data, token, message }
+        if (response.success && response.token && response.data) {
+          const result = {
+            success: true,
+            message: response.message || 'Login successful',
+            data: {
+              token: response.token,
+              user: response.data
             }
+          };
+          console.log('Returning successful login result:', result);
+          return result;
         }
+        
+        // Fallback for other response formats
+        if (response.token && response.user) {
+          return {
+            success: true,
+            message: 'Login successful',
+            data: {
+              token: response.token,
+              user: response.user
+            }
+          }
+        }
+        
+        if (response.success && response.data) {
+            const result = {
+                success: true,
+                message: response.message || 'Login successful',
+                data: {
+                  token: response.token,
+                  user: response.data
+                }
+            };
+            console.log('Returning fallback successful login result:', result);
+            return result;
+        }
+        
+        console.log('No matching condition found, returning failure');
         return {
             success: false,
             message: response.message || 'Login failed'
         }
     } catch (error: Error | any) {
+        console.error('handleLogin error caught:', error);
         return { success: false, message: error.message || 'Login action failed' }
     }
 }

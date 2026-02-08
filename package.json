@@ -10,11 +10,8 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-<<<<<<< HEAD
-=======
     "axios": "^1.13.2",
     "cors": "^2.8.5",
->>>>>>> API-calls
     "express": "^5.2.1",
     "next": "16.1.0",
     "react": "19.2.3",
@@ -24,15 +21,15 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-<<<<<<< HEAD
-=======
     "@types/cors": "^2.8.19",
->>>>>>> API-calls
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/supertest": "^6.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.0",
+    "supertest": "^7.2.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

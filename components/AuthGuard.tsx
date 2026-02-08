@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LoginSchema, LoginValues } from "@/app/lib/validations/login-auth";
 import { useRouter } from "next/navigation";
+import { RegisterSchema, RegisterValues } from "@/app/lib/validations/register-auth";
 
-
-export default function LoginForm() {
+export default function RegisterForm() {
     const [showPassword, setShowPassword] = useState(false);
     const router = useRouter();
 
@@ -17,29 +15,34 @@ export default function LoginForm() {
         register,
         handleSubmit,
         formState: { errors, isSubmitting },
-    } = useForm<LoginValues>({
-        resolver: zodResolver(LoginSchema),
+    } = useForm<RegisterValues>({
+        resolver: zodResolver(RegisterSchema),
         defaultValues: {
+            name: "",
             email: "",
             password: "",
+            confirmPassword: "",
         },
     });
 
-    const onSubmit = async (values: LoginValues) => {
-        console.log("Submit logic:", values);
+    const onSubmit = async (values: RegisterValues) => {
+        console.log("Registering...", values);
         router.push("/dashboard"); 
         router.refresh();
     };
 
     return (
-        <div className="flex flex-col items-center w-full ">
+        <div className="flex flex-col items-center w-full">
             <div className="text-[#8B5CF6] font-bold text-[1.7rem]">
                 PairUp
             </div>
 
-            <h1 className="text-3xl font-bold text-black mb-8">Login to GiftQuest</h1>
+            <h1 className="text-3xl font-bold text-black mb-8">Create an Account</h1>
+
+            
 
             <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
+
                 {/* Social Buttons */}
                 <button type="button" className="w-full flex items-center justify-center text-[#2D3142] gap-3 py-2.5 border border-gray-300 rounded-lg hover:bg-black-500 transition-all">
                     <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
@@ -55,26 +58,42 @@ export default function LoginForm() {
                     <span className="flex-shrink mx-4 text-sm font-bold text-black uppercase">OR</span>
                     <div className="flex-grow border-t border-gray-200"></div>
                 </div>
-
+                
                 {/* Inputs */}
                 <div className="space-y-4">
+                    {/* Name Field */}
+                    <div>
+                        <input
+                            {...register("name")}
+                            placeholder="Full Name"
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${
+                                errors.name ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
+                            }`}
+                        />
+                        {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name?.message}</p>}
+                    </div>
+
+                    {/* Email Field */}
                     <div>
                         <input
                             {...register("email")}
                             placeholder="Enter your email"
-                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.email ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
-                                }`}
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${
+                                errors.email ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
+                            }`}
                         />
                         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email?.message}</p>}
                     </div>
 
+                    {/* Password Field */}
                     <div className="relative">
                         <input
                             {...register("password")}
                             type={showPassword ? "text" : "password"}
                             placeholder="Password"
-                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${errors.password ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
-                                }`}
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${
+                                errors.password ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
+                            }`}
                         />
                         <button
                             type="button"
@@ -85,25 +104,32 @@ export default function LoginForm() {
                         </button>
                     </div>
                     {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password?.message}</p>}
-                </div>
 
-                <div className="text-center pt-2">
-                    <Link href="#" className="text-[#8B5CF6] text-sm font-semibold hover:underline">
-                        Forget password?
-                    </Link>
+                    {/* Confirm Password Field */}
+                    <div>
+                        <input
+                            {...register("confirmPassword")}
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Confirm Password"
+                            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-1 text-black ${
+                                errors.confirmPassword ? "border-red-500 focus:ring-red-500" : "border-gray-300 focus:ring-gray-400"
+                            }`}
+                        />
+                        {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword?.message}</p>}
+                    </div>
                 </div>
 
                 <button
                     disabled={isSubmitting}
-                    className="w-full bg-[#8B5CF6] text-white py-3 rounded-lg font-bold text-lg hover:bg-[#6441B6FF] transition-all disabled:opacity-50"
+                    className="w-full bg-[#8B5CF6] text-white py-3 rounded-lg font-bold text-lg hover:bg-[#6441B6FF] transition-all disabled:opacity-50 mt-4"
                 >
-                    {isSubmitting ? "Loading..." : "Login"}
+                    {isSubmitting ? "Creating account..." : "Join now"}
                 </button>
 
                 <p className="text-center text-sm text-gray-600 mt-6">
-                    Not a member yet?{" "}
-                    <Link href="/register" className="text-[#8B5CF6] font-bold hover:underline">
-                        Join now
+                    Already a member?{" "}
+                    <Link href="/login" className="text-[#8B5CF6] font-bold hover:underline">
+                        Login here
                     </Link>
                 </p>
             </form>

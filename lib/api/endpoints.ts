@@ -1,7 +1,14 @@
 
 export const API = {
     AUTH: {
-        LOGIN: '/api/auth/login',
-        REGISTER: '/api/auth/register',
+        LOGIN: '/auth/login',
+        REGISTER: '/auth/register',
+    },
+    USERS: {
+        GET_ALL: '/users',
+        GET_ONE: '/users/:id',
+        CREATE: '/users',
+        UPDATE: '/users/:id',
+        DELETE: '/users/:id',
     }
 }
