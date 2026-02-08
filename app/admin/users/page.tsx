@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import AuthGuard from '@/components/AuthGuard';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { usersAPI } from '@/lib/api';
 import { clearAuthData } from '@/lib/auth-utils';
 
@@ -44,7 +44,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <AuthGuard requiredRole="admin">
+    <ProtectedRoute requiredRole="admin">
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <div className="bg-white border-b border-gray-200">
@@ -162,6 +162,6 @@ export default function AdminUsersPage() {
           )}
         </div>
       </div>
-    </AuthGuard>
+    </ProtectedRoute>
   );
 }
