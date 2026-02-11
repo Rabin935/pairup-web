@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoginSchema, LoginValues } from "@/app/lib/validations/login-auth";
 import { useRouter } from "next/navigation";
+import { authAPI } from "@/lib/api";
+import { saveAuthData, UserInfo } from "@/lib/auth-utils";
 
 
 export default function LoginForm() {
     const [showPassword, setShowPassword] = useState(false);
+    const [submitError, setSubmitError] = useState<string | null>(null);
     const router = useRouter();
 
     const {
@@ -26,18 +28,46 @@ export default function LoginForm() {
     });
 
     const onSubmit = async (values: LoginValues) => {
-        console.log("Submit logic:", values);
-        router.push("/dashboard"); 
-        router.refresh();
+        setSubmitError(null);
+
+        try {
+            const response = await authAPI.login(values.email, values.password);
+            const { token, data: user } = response.data;
+
+            if (!token || !user) {
+                throw new Error("Invalid response: missing token or user data");
+            }
+
+            const userInfo = user as UserInfo;
+            saveAuthData(token, userInfo);
+
+            if (userInfo.role === "admin") {
+                router.push("/admin/users");
+            } else {
+                router.push("/dashboard");
+            }
+
+            router.refresh();
+        } catch (error: any) {
+            console.error("Login error:", error);
+            const message = error?.response?.data?.message || error?.message || "Login failed. Please try again.";
+            setSubmitError(message);
+        }
     };
 
     return (
-        <div className="flex flex-col items-center w-full ">
+        <div className="flex flex-col items-center w-full">
             <div className="text-[#8B5CF6] font-bold text-[1.7rem]">
                 PairUp
             </div>
 
             <h1 className="text-3xl font-bold text-black mb-8">Login to GiftQuest</h1>
+
+            {submitError && (
+                <div className="w-full mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    {submitError}
+                </div>
+            )}
 
             <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
                 {/* Social Buttons */}
@@ -97,7 +127,7 @@ export default function LoginForm() {
                     disabled={isSubmitting}
                     className="w-full bg-[#8B5CF6] text-white py-3 rounded-lg font-bold text-lg hover:bg-[#6441B6FF] transition-all disabled:opacity-50"
                 >
-                    {isSubmitting ? "Loading..." : "Login"}
+                    {isSubmitting ? "Logging in..." : "Login"}
                 </button>
 
                 <p className="text-center text-sm text-gray-600 mt-6">
