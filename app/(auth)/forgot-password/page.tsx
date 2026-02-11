@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
         <div className="text-[#8B5CF6] font-bold text-[1.7rem]">PairUp</div>
         <h1 className="text-3xl font-bold text-black mt-2">Forgot password</h1>
         <p className="text-sm text-gray-600 mt-2 text-center">
-          Enter the email tied to your account and we&apos;ll send a reset link if one exists.
+          Enter the email tied to your account and we'll send a reset link if one exists.
         </p>
 
         {successMessage && (

@@ -3,6 +3,7 @@ export const API = {
     AUTH: {
         LOGIN: '/auth/login',
         REGISTER: '/auth/register',
+        FORGOT_PASSWORD: '/auth/forgot-password'
     },
     USERS: {
         GET_ALL: '/users',
