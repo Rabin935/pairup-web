@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,6 +17,7 @@ type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
 export default function ForgotPasswordPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const router = useRouter();
 
   const {
     register,
@@ -32,9 +34,21 @@ export default function ForgotPasswordPage() {
     setErrorMessage(null);
 
     try {
-      await apiClient.post("/api/auth/forgot-password", values);
-      setSuccessMessage("If the email exists, reset link has been sent.");
+      const response = await apiClient.post("/api/auth/forgot-password", values);
       reset();
+
+      const responseToken =
+        response?.data?.token ||
+        response?.data?.resetToken ||
+        response?.data?.data?.token ||
+        response?.data?.data?.resetToken;
+
+      if (responseToken) {
+        router.push(`/reset-password/${responseToken}`);
+        return;
+      }
+
+      setSuccessMessage("If the email exists, reset link has been sent.");
     } catch (err: any) {
       const fallback =
         err?.response?.data?.message ||

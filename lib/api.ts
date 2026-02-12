@@ -51,6 +51,8 @@ export const authAPI = {
     apiClient.post('api/auth/register', data),
   forgotPassword: (email: string) =>
     apiClient.post('api/auth/forgot-password', { email }),
+  resetPassword: (token: string, newPassword: string) =>
+    apiClient.post(`api/auth/reset-password/${token}`, { newPassword }),
   getUserProfile: (id: string) =>
     apiClient.get(`/auth/${id}`),
   updateUserProfile: (id: string, data: FormData) =>
