@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'http://localhost:5000';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -46,6 +49,10 @@ export const authAPI = {
     apiClient.post('api/auth/login', { email, password }),
   register: (data: any) =>
     apiClient.post('api/auth/register', data),
+  forgotPassword: (email: string) =>
+    apiClient.post('api/auth/forgot-password', { email }),
+  resetPassword: (token: string, newPassword: string) =>
+    apiClient.post(`api/auth/reset-password/${token}`, { newPassword }),
   getUserProfile: (id: string) =>
     apiClient.get(`/auth/${id}`),
   updateUserProfile: (id: string, data: FormData) =>
