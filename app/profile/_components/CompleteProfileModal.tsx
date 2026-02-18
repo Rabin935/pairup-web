@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import apiClient from "@/lib/api";
 
 type InitialProfileData = {
@@ -20,6 +21,8 @@ interface CompleteProfileModalProps {
 }
 
 export default function CompleteProfileModal({ open, onClose, onSuccess, initialData }: CompleteProfileModalProps) {
+    const router = useRouter();
+    const isEditMode = Boolean(initialData);
     const [gender, setGender] = useState(initialData?.gender || "");
     const [age, setAge] = useState(initialData?.age?.toString() || "");
     const [location, setLocation] = useState(initialData?.location || "");
@@ -27,6 +30,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
     const [bio, setBio] = useState(initialData?.bio || "");
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(initialData?.profileImage || null);
+    const [removeExistingImage, setRemoveExistingImage] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +38,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
         if (!initialData?.interests) return "";
         if (Array.isArray(initialData.interests)) return initialData.interests.join(", ");
         return initialData.interests;
-    }, [initialData?.interests]);
+    }, [initialData]);
 
     useEffect(() => {
         if (open) {
@@ -45,23 +49,25 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
             setInterests(normalizedInterests);
             setPreview(initialData?.profileImage || null);
             setImageFile(null);
+            setRemoveExistingImage(false);
             setError(null);
         }
     }, [open, initialData, normalizedInterests]);
 
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0] || null;
         setImageFile(file);
 
         if (file) {
             const nextPreview = URL.createObjectURL(file);
             setPreview(nextPreview);
+            setRemoveExistingImage(false);
         } else {
             setPreview(initialData?.profileImage || null);
         }
     };
 
-    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setIsSubmitting(true);
         setError(null);
@@ -71,14 +77,21 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
             if (gender) formData.append("gender", gender);
             if (age) formData.append("age", age);
             if (location) formData.append("location", location);
-            if (interests) formData.append("interests", interests);
+            const formattedInterests = interests
+                .split(",")
+                .map((interest) => interest.trim())
+                .filter(Boolean)
+                .join(", ");
+            if (formattedInterests) formData.append("interests", formattedInterests);
             if (bio) formData.append("bio", bio);
             if (imageFile) formData.append("profileImage", imageFile);
+            if (removeExistingImage && !imageFile) formData.append("removeProfileImage", "true");
 
             await apiClient.put("api/users/update-profile", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
+            router.refresh();
             onSuccess?.();
             onClose();
         } catch (err: any) {
@@ -103,8 +116,14 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                 </button>
                 <div className="mb-6">
                     <p className="text-xs uppercase tracking-[0.4em] text-rose-400">Profile</p>
-                    <h2 className="mt-2 text-2xl font-semibold text-slate-900">Complete your profile</h2>
-                    <p className="text-sm text-slate-500">Share a little more so we can help you pair up faster.</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+                        {isEditMode ? "Update your profile" : "Complete your profile"}
+                    </h2>
+                    <p className="text-sm text-slate-500">
+                        {isEditMode
+                            ? "Keep your details fresh so members always see the real you."
+                            : "Share a little more so we can help you pair up faster."}
+                    </p>
                 </div>
 
                 {error && (
@@ -185,6 +204,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                                     onClick={() => {
                                         setPreview(null);
                                         setImageFile(null);
+                                        setRemoveExistingImage(true);
                                     }}
                                     className="text-sm font-semibold text-rose-500"
                                 >
@@ -207,7 +227,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                             disabled={isSubmitting}
                             className="flex-1 rounded-full bg-gradient-to-r from-rose-500 to-fuchsia-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-200 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            {isSubmitting ? "Saving..." : "Save details"}
+                            {isSubmitting ? (isEditMode ? "Updating..." : "Saving...") : isEditMode ? "Update Profile" : "Save & Continue"}
                         </button>
                         <button
                             type="button"
