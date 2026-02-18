@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import apiClient from "@/lib/api";
+import CompleteProfileModal from "./_components/CompleteProfileModal";
 
 type UserProfile = {
     firstname?: string;
@@ -31,29 +31,29 @@ const normalizeUserPayload = (payload: any): UserProfile | null => {
 };
 
 export default function ProfilePage() {
-    const router = useRouter();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const fetchProfile = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const { data } = await apiClient.get("api/users/me");
+            const normalized = normalizeUserPayload(data);
+            setProfile(normalized);
+        } catch (err: any) {
+            const message = err?.response?.data?.message || err?.message || "Failed to load profile";
+            setError(message);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
-        const fetchProfile = async () => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const { data } = await apiClient.get("api/users/me");
-                const normalized = normalizeUserPayload(data);
-                setProfile(normalized);
-            } catch (err: any) {
-                const message = err?.response?.data?.message || err?.message || "Failed to load profile";
-                setError(message);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
         fetchProfile();
-    }, []);
+    }, [fetchProfile]);
 
     const interestChips = useMemo(() => {
         if (!profile?.interests) return [] as string[];
@@ -123,7 +123,7 @@ export default function ProfilePage() {
                     <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 flex items-center justify-between gap-4">
                         <p className="text-sm font-semibold">Complete your details to continue</p>
                         <button
-                            onClick={() => router.push("/user/profile")}
+                            onClick={() => setIsModalOpen(true)}
                             className="text-sm font-semibold underline decoration-amber-400 decoration-2"
                         >
                             Update now
@@ -152,7 +152,7 @@ export default function ProfilePage() {
                         </div>
                         <button
                             className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-rose-500 to-fuchsia-500 px-6 py-3 text-white font-semibold shadow-lg shadow-rose-200 hover:opacity-95 transition"
-                            onClick={() => router.push("/user/profile")}
+                            onClick={() => setIsModalOpen(true)}
                         >
                             Complete Profile
                         </button>
@@ -211,6 +211,12 @@ export default function ProfilePage() {
                     </div>
                     {renderState()}
                 </div>
+                <CompleteProfileModal
+                    open={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    onSuccess={() => fetchProfile()}
+                    initialData={profile}
+                />
             </div>
         </ProtectedRoute>
     );
