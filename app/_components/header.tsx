@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
+import Sidebar from "@/components/Sidebar";
 
 interface HeaderProps {
     onMenuToggle?: () => void;
@@ -11,6 +12,7 @@ interface HeaderProps {
 
 export default function Header({ onMenuToggle }: HeaderProps) {
     const { isAuthenticated, user, logout } = useAuth();
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const initials = useMemo(() => {
         if (!user?.name && !user?.email) return "";
@@ -22,9 +24,19 @@ export default function Header({ onMenuToggle }: HeaderProps) {
             .join("");
     }, [user]);
 
+    const handleSidebarOpen = () => {
+        setIsSidebarOpen(true);
+        onMenuToggle?.();
+    };
+
+    const handleSidebarClose = () => {
+        setIsSidebarOpen(false);
+    };
+
     return (
-        <header className="sticky top-0 z-40 w-full border-b border-white/40 bg-[#2D3142] px-4 py-3 backdrop-blur-md">
-            <div className="mx-auto flex max-w-6xl items-center justify-between">
+        <>
+            <header className="sticky top-0 z-40 w-full border-b border-white/40 bg-[#2D3142] px-4 py-3 backdrop-blur-md">
+                <div className="mx-auto flex max-w-10xl items-center justify-between">
                 <Link href="/" className="flex items-center gap-3">
                     <div className="rounded-2xl bg-rose-100/80 p-2 text-rose-500">
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
@@ -54,6 +66,14 @@ export default function Header({ onMenuToggle }: HeaderProps) {
 
                 {!isAuthenticated ? (
                     <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            aria-label="Open menu"
+                            onClick={handleSidebarOpen}
+                            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-600 shadow-sm transition hover:border-rose-200 hover:text-rose-500 md:hidden"
+                        >
+                            ☰
+                        </button>
                         <Link
                             href="/login"
                             className="px-5 py-1.5 border border-white rounded-md text-sm font-bold hover:bg-white hover:text-[#2D3142] hover:scale-110 transition-all duration-200"
@@ -72,7 +92,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                         <button
                             type="button"
                             aria-label="Toggle menu"
-                            onClick={onMenuToggle}
+                            onClick={handleSidebarOpen}
                             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-600 shadow-sm transition hover:border-rose-200 hover:text-rose-500"
                         >
                             ☰
@@ -99,7 +119,9 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                         </button>
                     </div>
                 )}
-            </div>
-        </header>
+                </div>
+            </header>
+            <Sidebar isOpen={isSidebarOpen} onClose={handleSidebarClose} />
+        </>
     );
 }

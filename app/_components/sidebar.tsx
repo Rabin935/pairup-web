@@ -31,7 +31,7 @@ export default function Navbar() {
 
     return (
         <aside className="hidden md:flex sticky top-0 h-screen w-64 flex-col bg-[#2D3142] text-white shadow-2xl">
-            <div className="px-6 py-8 border-b border-white/10">
+            {/* <div className="px-6 py-8 border-b border-white/10">
                 <div className="flex items-center gap-3">
                     <div className="rounded-2xl bg-white/10 p-3 text-[#f472b6]">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -41,9 +41,9 @@ export default function Navbar() {
                     <div>
                         <p className="text-xs uppercase tracking-[0.4em] text-white/60">PairUp</p>
                         <p className="text-xl font-semibold">Navigate</p>
-                    </div>
+                    </div> 
                 </div>
-            </div>
+            </div> */}
 
             <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-2">
                 {NAV_LINKS.map((link) => {
