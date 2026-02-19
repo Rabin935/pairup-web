@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState, type ChangeEvent } from "react";
-import axios from "axios";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import apiClient from "@/lib/api";
 
 export default function CreatePage() {
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -34,7 +34,7 @@ export default function CreatePage() {
         setSuccessMessage(null);
 
         try {
-            const { data } = await axios.post("/api/users/upload-images", formData, {
+            const { data } = await apiClient.post("api/users/upload-images", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
             const nextImages = (data?.images as string[]) || [];

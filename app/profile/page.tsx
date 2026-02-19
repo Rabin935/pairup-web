@@ -5,6 +5,12 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import apiClient from "@/lib/api";
 import CompleteProfileModal from "./_components/CompleteProfileModal";
 
+type UserImage = {
+    id: string;
+    url: string;
+    isThumbnail?: boolean;
+};
+
 type UserProfile = {
     firstname?: string;
     lastname?: string;
@@ -17,6 +23,7 @@ type UserProfile = {
     bio?: string;
     profileImage?: string;
     isProfileComplete?: boolean;
+    images?: UserImage[];
 };
 
 const getDisplayValue = (value: string | number | null | undefined) => {
@@ -35,6 +42,8 @@ export default function ProfilePage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSettingThumbnail, setIsSettingThumbnail] = useState<string | null>(null);
+    const [thumbnailError, setThumbnailError] = useState<string | null>(null);
 
     const fetchProfile = useCallback(async () => {
         setIsLoading(true);
@@ -83,6 +92,56 @@ export default function ProfilePage() {
         { label: "Age", value: profile?.age },
         { label: "Location", value: profile?.location },
     ];
+
+    const handleSetThumbnail = async (imageId: string) => {
+        setThumbnailError(null);
+
+        let shouldRequest = false;
+        let rollbackPayload: { images?: UserImage[]; profileImage?: string } | null = null;
+
+        setProfile((current) => {
+            if (!current?.images?.length) return current;
+            const targetImage = current.images.find((image) => image.id === imageId);
+            if (!targetImage || targetImage.isThumbnail) return current;
+
+            shouldRequest = true;
+            rollbackPayload = {
+                images: current.images.map((image) => ({ ...image })),
+                profileImage: current.profileImage,
+            };
+
+            return {
+                ...current,
+                profileImage: targetImage.url,
+                images: current.images.map((image) => ({
+                    ...image,
+                    isThumbnail: image.id === imageId,
+                })),
+            };
+        });
+
+        if (!shouldRequest) return;
+
+        setIsSettingThumbnail(imageId);
+        try {
+            await apiClient.patch(`api/users/set-thumbnail/${imageId}`);
+        } catch (err: any) {
+            const message = err?.response?.data?.message || err?.message || "Failed to set thumbnail";
+            setThumbnailError(message);
+            if (rollbackPayload) {
+                setProfile((current) => {
+                    if (!current) return current;
+                    return {
+                        ...current,
+                        profileImage: rollbackPayload?.profileImage,
+                        images: rollbackPayload?.images,
+                    };
+                });
+            }
+        } finally {
+            setIsSettingThumbnail(null);
+        }
+    };
 
     const renderState = () => {
         if (isLoading) {
@@ -191,6 +250,58 @@ export default function ProfilePage() {
                             </div>
                         ))}
                     </div>
+                </section>
+
+                <section className="bg-white rounded-3xl shadow-xl shadow-rose-100/60 p-8 space-y-6">
+                    <div className="flex flex-col gap-2">
+                        <div>
+                            <p className="text-sm uppercase tracking-[0.25em] text-rose-400">Gallery</p>
+                            <h2 className="text-2xl font-semibold text-slate-900">Photo showcase</h2>
+                            <p className="text-sm text-slate-500">Highlight your best look by choosing a thumbnail.</p>
+                        </div>
+                        {thumbnailError && (
+                            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                {thumbnailError}
+                            </div>
+                        )}
+                    </div>
+
+                    {profile.images?.length ? (
+                        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                            {profile.images.map((image) => (
+                                <div
+                                    key={image.id}
+                                    className={`relative overflow-hidden rounded-3xl border ${
+                                        image.isThumbnail ? "border-rose-500 shadow-lg shadow-rose-100" : "border-slate-100"
+                                    } bg-slate-50`}
+                                >
+                                    {image.isThumbnail && (
+                                        <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-rose-600 shadow">
+                                            Thumbnail
+                                        </span>
+                                    )}
+                                    <img src={image.url} alt="Profile" className="h-56 w-full object-cover" />
+                                    <div className="p-4">
+                                        <button
+                                            onClick={() => handleSetThumbnail(image.id)}
+                                            disabled={image.isThumbnail || isSettingThumbnail === image.id}
+                                            className="w-full rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            {image.isThumbnail
+                                                ? "Current thumbnail"
+                                                : isSettingThumbnail === image.id
+                                                    ? "Setting..."
+                                                    : "Set as Thumbnail"}
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/60 p-8 text-center text-slate-500">
+                            Upload photos from the Create tab to build your gallery.
+                        </div>
+                    )}
                 </section>
             </>
         );
