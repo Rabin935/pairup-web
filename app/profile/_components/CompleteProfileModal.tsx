@@ -225,7 +225,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="flex-1 rounded-full bg-gradient-to-r from-rose-500 to-fuchsia-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-200 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="flex-1 rounded-full bg-[#8B5CF6] from-rose-500 to-fuchsia-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-200 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {isSubmitting ? (isEditMode ? "Updating..." : "Saving...") : isEditMode ? "Update Profile" : "Save & Continue"}
                         </button>

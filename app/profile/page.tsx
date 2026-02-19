@@ -151,7 +151,7 @@ export default function ProfilePage() {
                             <p className="text-sm text-slate-500">{getDisplayValue(profile.email)}</p>
                         </div>
                         <button
-                            className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-rose-500 to-fuchsia-500 px-6 py-3 text-white font-semibold shadow-lg shadow-rose-200 hover:opacity-95 transition"
+                            className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-[#8B5CF6] from-rose-500 to-fuchsia-500 px-6 py-3 text-white font-semibold shadow-lg shadow-rose-200 hover:opacity-95 transition"
                             onClick={() => setIsModalOpen(true)}
                         >
                             Complete Profile
