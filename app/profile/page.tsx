@@ -150,6 +150,31 @@ export default function ProfilePage() {
                             </p>
                             <p className="text-sm text-slate-500">{getDisplayValue(profile.email)}</p>
                         </div>
+                        <div className="mt-6 w-full text-left space-y-5">
+                            <div>
+                                <p className="text-xs uppercase tracking-wide text-slate-500">Bio</p>
+                                <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                                    {getDisplayValue(profile.bio)}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs uppercase tracking-wide text-slate-500">Interests</p>
+                                {interestChips.length ? (
+                                    <div className="mt-2 flex flex-wrap justify-start gap-2">
+                                        {interestChips.map((interest) => (
+                                            <span
+                                                key={interest}
+                                                className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-600 border border-rose-100"
+                                            >
+                                                {interest}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="mt-2 text-sm text-slate-500">N/A</p>
+                                )}
+                            </div>
+                        </div>
                         <button
                             className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-[#8B5CF6] from-rose-500 to-fuchsia-500 px-6 py-3 text-white font-semibold shadow-lg shadow-rose-200 hover:opacity-95 transition"
                             onClick={() => setIsModalOpen(true)}
@@ -165,33 +190,6 @@ export default function ProfilePage() {
                                 <p className="mt-2 text-lg font-semibold text-slate-900">{getDisplayValue(field.value)}</p>
                             </div>
                         ))}
-                    </div>
-                </section>
-
-                <section className="bg-white rounded-3xl shadow-xl shadow-rose-100/60 p-8 space-y-6">
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Bio</h2>
-                        <p className="mt-3 text-slate-600 leading-relaxed">
-                            {getDisplayValue(profile.bio)}
-                        </p>
-                    </div>
-
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Interests</h2>
-                        {interestChips.length ? (
-                            <div className="mt-3 flex flex-wrap gap-3">
-                                {interestChips.map((interest) => (
-                                    <span
-                                        key={interest}
-                                        className="inline-flex items-center rounded-full bg-rose-50 px-4 py-1.5 text-sm font-medium text-rose-600 border border-rose-100"
-                                    >
-                                        {interest}
-                                    </span>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="mt-3 text-slate-500">N/A</p>
-                        )}
                     </div>
                 </section>
             </>
