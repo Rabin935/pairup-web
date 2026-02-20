@@ -2,6 +2,9 @@
 
 export interface UserInfo {
   id: string;
+  _id?: string;
+  userId?: string;
+  uid?: string;
   firstname: string;
   lastname: string;
   email: string;
