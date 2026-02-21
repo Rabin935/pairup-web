@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
@@ -33,36 +33,54 @@ export default function Header({ onMenuToggle }: HeaderProps) {
         setIsSidebarOpen(false);
     };
 
+    
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const handleGetStarted = () => {
+    window.location.href = "/login";
+    };
+
+    
+
     return (
         <>
-            <header className="sticky top-0 z-40 w-full border-b border-white/40 bg-[#2D3142] px-4 py-3 backdrop-blur-md">
-                <div className="mx-auto flex max-w-10xl items-center justify-between">
-                <Link href="/" className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-rose-100/80 p-2 text-rose-500">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                        </svg>
-                    </div>
-                    <div>
-                        <p className="text-xs uppercase tracking-[0.4em] text-slate-500">PairUp</p>
-                        <p className="text-lg font-semibold text-slate-900">Connections</p>
-                    </div>
-                </Link>
+            <nav
+        className={`sticky top-0 z-40 w-full border-b border-white/40 bg-white px-4 py-3 backdrop-blur-md ${
+          scrolled
+            ? "bg-white/90 backdrop-blur-xl shadow-sm border-b border-violet-100"
+            : "bg-transparent"
+        }`}
+      >
 
-                <nav className="hidden items-center gap-6 text-sm font-medium text-slate-500 md:flex">
-                    <Link href="/discover" className="transition hover:text-rose-500">
-                        Discover
-                    </Link>
-                    <Link href="/search" className="transition hover:text-rose-500">
-                        Search
-                    </Link>
-                    <Link href="/chats" className="transition hover:text-rose-500">
-                        Chats
-                    </Link>
-                    <Link href="/about" className="transition hover:text-rose-500">
-                        About
-                    </Link>
-                </nav>
+
+
+                <div className="mx-auto flex max-w-8xl items-center justify-between">
+
+                    {/* Logo */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-md shadow-violet-300/40">
+              <svg viewBox="0 0 24 24" className="fill-white w-5 h-5">
+                <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z"/>
+              </svg>
+            </div>
+            <span className="font-display font-bold text-xl text-gray-900">PairUp</span>
+          </div>
+                
+
+                 {/* Nav links */}
+          <div className="hidden md:flex items-center gap-8 text-sm text-gray-500 font-medium">
+            <a href="#features" className="hover:text-violet-600 transition-colors">Features</a>
+            <a href="#how" className="hover:text-violet-600 transition-colors">How it works</a>
+            <a href="#stats" className="hover:text-violet-600 transition-colors">About</a>
+          </div>
+
+                
 
                 {!isAuthenticated ? (
                     <div className="flex items-center gap-3">
@@ -76,16 +94,11 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                         </button>
                         <Link
                             href="/login"
-                            className="px-5 py-1.5 border border-white rounded-md text-sm font-bold hover:bg-white hover:text-[#2D3142] hover:scale-110 transition-all duration-200"
+                            className="text-sm font-semibold px-5 py-2.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-700 hover:bg-violet-600 hover:text-white hover:border-violet-600 hover:shadow-lg hover:shadow-violet-200 transition-all duration-300"
                         >
-                            Login
+                            Sign in
                         </Link>
-                        <Link
-                            href="/register"
-                            className="px-5 py-1.5 border border-white rounded-md text-sm font-bold hover:bg-white hover:text-[#2D3142] hover:scale-110 transition-all duration-200"
-                        >
-                            Sign up
-                        </Link>
+
                     </div>
                 ) : (
                     <div className="flex items-center gap-3">
@@ -120,8 +133,8 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                     </div>
                 )}
                 </div>
-            </header>
+            </nav>
             <Sidebar isOpen={isSidebarOpen} onClose={handleSidebarClose} />
         </>
     );
-}
+}   

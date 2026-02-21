@@ -14,7 +14,7 @@ const MENU_ITEMS: Array<{ label: string; href: string }> = [
     { label: "Profile", href: "/profile" },
     { label: "Discover", href: "/discover" },
     { label: "Matches", href: "/matches" },
-    { label: "Messages", href: "/messages" },
+    { label: "Messages", href: "/message" },
     { label: "Settings", href: "/settings" },
 ];
 

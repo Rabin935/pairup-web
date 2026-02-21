@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TinderCard from "react-tinder-card";
 import { Loader2, Sparkles } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import apiClient from "@/lib/api";
+import type { AxiosError } from "axios";
 
 type LooseRecord = Record<string, unknown>;
 
@@ -137,21 +138,28 @@ const extractUsers = (payload: unknown): DiscoverUser[] => {
 };
 
 const fetchDiscoverUsers = async (): Promise<DiscoverUser[]> => {
-    const response = await apiClient.get("api/users/discover");
+    const response = await apiClient.get("/api/users/discover");
     return extractUsers(response.data);
 };
 
 export default function DiscoverPage() {
     const [users, setUsers] = useState<DiscoverUser[]>([]);
+    const [initialUsers, setInitialUsers] = useState<DiscoverUser[]>([]);
+    const [deckVersion, setDeckVersion] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [swipeError, setSwipeError] = useState<string | null>(null);
+    const swipeQueueRef = useRef<Set<string>>(new Set());
 
     const loadUsers = useCallback(async () => {
         setLoading(true);
         setError(null);
+        setSwipeError(null);
         try {
             const data = await fetchDiscoverUsers();
             setUsers(data);
+            setInitialUsers(data);
+            setDeckVersion((prev) => prev + 1);
         } catch (err) {
             console.error("Failed to fetch discover users", err);
             setError("Unable to load discover matches. Please try again.");
@@ -159,6 +167,19 @@ export default function DiscoverPage() {
             setLoading(false);
         }
     }, []);
+
+    const resetDeck = useCallback(() => {
+        setError(null);
+        setSwipeError(null);
+
+        if (!initialUsers.length || users.length === 0) {
+            void loadUsers();
+            return;
+        }
+
+        setUsers([...initialUsers]);
+        setDeckVersion((prev) => prev + 1);
+    }, [initialUsers, loadUsers, users.length]);
 
     useEffect(() => {
         void loadUsers();
@@ -168,15 +189,36 @@ export default function DiscoverPage() {
         const action = directionToAction[direction];
         if (!action) return;
 
+        if (swipeQueueRef.current.has(user.id)) {
+            return;
+        }
+
+        swipeQueueRef.current.add(user.id);
+        setSwipeError(null);
         setUsers((prev) => prev.filter((candidate) => candidate.id !== user.id));
 
         try {
-            await apiClient.post("api/swipes", {
+            await apiClient.post("/api/swipes", {
                 swipedUserId: user.id,
                 action,
             });
         } catch (err) {
-            console.error("Swipe submission failed", err);
+            const axiosError = err as AxiosError<{ message?: string }>;
+            const status = axiosError.response?.status;
+            const message = axiosError.response?.data?.message;
+
+            if (status !== 409) {
+                setUsers((prev) => [user, ...prev]);
+                console.error("Swipe submission failed", err);
+            }
+
+            setSwipeError(
+                status === 409
+                    ? "You already swiped on this profile."
+                    : message ?? "Unable to record swipe. Please try again."
+            );
+        } finally {
+            swipeQueueRef.current.delete(user.id);
         }
     }, []);
 
@@ -219,19 +261,22 @@ export default function DiscoverPage() {
             return (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-white/80 p-10 text-center shadow-sm">
                     <p className="text-xl font-semibold text-slate-900">No more users in your deck.</p>
-                    <p className="mt-2 text-sm text-slate-500">We&apos;ll refresh this view as soon as new profiles are available.</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                        You&apos;ve swiped through everyone for now. Check back later for new profiles.
+                    </p>
                     <button
-                        onClick={() => void loadUsers()}
+                        onClick={resetDeck}
                         className="mt-6 inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-800"
                     >
-                        Check again
+                        Reload deck
                     </button>
                 </div>
             );
         }
 
         return (
-            <div className="relative mx-auto h-[520px] w-full max-w-md">
+            <div className="flex flex-col items-center gap-4">
+                <div className="relative mx-auto h-[520px] w-full max-w-md">
                 {stackedUsers.map((user, index) => {
                     const depth = stackedUsers.length - index - 1;
                     const translateY = depth * 10;
@@ -239,7 +284,7 @@ export default function DiscoverPage() {
 
                     return (
                         <TinderCard
-                            key={user.id}
+                            key={`${user.id}-${deckVersion}`}
                             className="absolute inset-0 cursor-grab"
                             preventSwipe={["up", "down"]}
                             onSwipe={(dir) => handleSwipeWrapper(dir, user)}
@@ -282,6 +327,10 @@ export default function DiscoverPage() {
                         </TinderCard>
                     );
                 })}
+                </div>
+                {swipeError ? (
+                    <p className="text-sm text-rose-500 text-center max-w-md">{swipeError}</p>
+                ) : null}
             </div>
         );
     };

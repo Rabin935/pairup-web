@@ -1,16 +1,16 @@
 
 export const API = {
     AUTH: {
-        LOGIN: '/auth/login',
-        REGISTER: '/auth/register',
-        FORGOT_PASSWORD: '/auth/forgot-password',
-        RESET_PASSWORD: '/auth/reset-password'
+        LOGIN: '/api/auth/login',
+        REGISTER: '/api/auth/register',
+        FORGOT_PASSWORD: '/api/auth/forgot-password',
+        RESET_PASSWORD: '/api/auth/reset-password'
     },
     USERS: {
-        GET_ALL: '/users',
-        GET_ONE: '/users/:id',
-        CREATE: '/users',
-        UPDATE: '/users/:id',
-        DELETE: '/users/:id',
+        GET_ALL: '/api/users',
+        GET_ONE: '/api/users/:id',
+        CREATE: '/api/users',
+        UPDATE: '/api/users/:id',
+        DELETE: '/api/users/:id',
     }
 }

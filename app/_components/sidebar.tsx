@@ -6,11 +6,11 @@ import { usePathname } from "next/navigation";
 import { getAuthData } from "@/lib/auth-utils";
 
 const NAV_LINKS = [
-    { label: "Home", href: "/" },
+    { label: "Home", href: "/sidebar/home" },
     { label: "Discover", href: "/sidebar/discover" },
     { label: "Search", href: "/sidebar/search" },
     { label: "Create", href: "/sidebar/create" },
-    { label: "Chats", href: "/sidebar/chats" },
+    { label: "Message", href: "/sidebar/message" },
     { label: "Profile", href: "/profile" },
 ];
 
