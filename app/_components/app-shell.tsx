@@ -21,7 +21,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isSidebarPage =
     pathname.startsWith("/sidebar") ||
     pathname.startsWith("/profile") ||
-    pathname.startsWith("/user");
+    pathname.startsWith("/user") ||
+    pathname.startsWith("/settings");
 
   const showSidebar = Boolean(isAuthenticated) && isSidebarPage;
   const showHeader = !isAuthenticated && !isAuthPage;
@@ -34,7 +35,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
       {showHeader && <Header />}
       <div className="flex flex-1">
         {showSidebar && <Navbar />}
@@ -43,7 +44,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={handleLogout}
-              className="fixed right-4 top-4 z-50 inline-flex items-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition hover:bg-red-50"
+              className="fixed right-4 top-4 z-50 inline-flex items-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-sm transition-colors hover:bg-red-50 dark:border-red-900/40 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-slate-800"
             >
               <LogOut size={16} />
               Logout
