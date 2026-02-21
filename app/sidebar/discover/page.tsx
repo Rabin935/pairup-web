@@ -93,16 +93,47 @@ const pickThumbnail = (images: DiscoverImage[], fallback?: string) => {
     return fallback ?? FALLBACK_IMAGE;
 };
 
-const extractUsers = (payload: unknown): DiscoverUser[] => {
-    const collection = (() => {
-        if (Array.isArray(payload)) return payload;
-        if (isRecord(payload)) {
-            if (Array.isArray(payload.users)) return payload.users;
-            if (Array.isArray(payload.data)) return payload.data;
-            if (Array.isArray(payload.results)) return payload.results;
+const pickCollection = (payload: unknown, depth = 0): unknown[] => {
+    if (Array.isArray(payload)) return payload;
+    if (!isRecord(payload) || depth > 4) return [];
+
+    const candidateKeys = [
+        "users",
+        "data",
+        "results",
+        "list",
+        "items",
+        "records",
+        "profiles",
+        "discover",
+        "matches",
+        "payload",
+    ];
+
+    for (const key of candidateKeys) {
+        const value = payload[key];
+        if (Array.isArray(value)) return value;
+        if (isRecord(value)) {
+            const nested = pickCollection(value, depth + 1);
+            if (nested.length) return nested;
         }
-        return [];
-    })();
+    }
+
+
+    // Generic fallback: search any nested object values for arrays.
+    for (const value of Object.values(payload)) {
+        if (Array.isArray(value)) return value;
+        if (isRecord(value)) {
+            const nested = pickCollection(value, depth + 1);
+            if (nested.length) return nested;
+        }
+    }
+
+    return [];
+};
+
+const extractUsers = (payload: unknown): DiscoverUser[] => {
+    const collection = pickCollection(payload);
 
     return collection
         .map((entry, index) => {
@@ -142,44 +173,69 @@ const fetchDiscoverUsers = async (): Promise<DiscoverUser[]> => {
     return extractUsers(response.data);
 };
 
+type LoadOptions = {
+    fallbackToCached?: boolean;
+    showSpinner?: boolean;
+};
+
 export default function DiscoverPage() {
     const [users, setUsers] = useState<DiscoverUser[]>([]);
-    const [initialUsers, setInitialUsers] = useState<DiscoverUser[]>([]);
     const [deckVersion, setDeckVersion] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [swipeError, setSwipeError] = useState<string | null>(null);
+    const [reloadPending, setReloadPending] = useState(false);
     const swipeQueueRef = useRef<Set<string>>(new Set());
+    const autoReloadingRef = useRef(false);
+    const initialDeckRef = useRef<DiscoverUser[]>([]);
 
-    const loadUsers = useCallback(async () => {
-        setLoading(true);
+    const loadUsers = useCallback(async (options?: LoadOptions) => {
+        const fallbackToCached = options?.fallbackToCached ?? false;
+        const showSpinner = options?.showSpinner ?? true;
+
+        if (showSpinner) {
+            setLoading(true);
+        }
         setError(null);
         setSwipeError(null);
         try {
             const data = await fetchDiscoverUsers();
-            setUsers(data);
-            setInitialUsers(data);
+            if (data.length > 0) {
+                setUsers(data);
+                initialDeckRef.current = data;
+            } else if (fallbackToCached && initialDeckRef.current.length) {
+                setUsers([...initialDeckRef.current]);
+            } else {
+                setUsers([]);
+            }
             setDeckVersion((prev) => prev + 1);
+            swipeQueueRef.current.clear();
         } catch (err) {
             console.error("Failed to fetch discover users", err);
             setError("Unable to load discover matches. Please try again.");
+            if (fallbackToCached && initialDeckRef.current.length) {
+                setUsers([...initialDeckRef.current]);
+            }
         } finally {
-            setLoading(false);
+            if (showSpinner) {
+                setLoading(false);
+            }
         }
     }, []);
 
     const resetDeck = useCallback(() => {
         setError(null);
         setSwipeError(null);
+        setReloadPending(true);
 
-        if (!initialUsers.length || users.length === 0) {
-            void loadUsers();
-            return;
-        }
-
-        setUsers([...initialUsers]);
-        setDeckVersion((prev) => prev + 1);
-    }, [initialUsers, loadUsers, users.length]);
+        loadUsers({ fallbackToCached: true, showSpinner: false })
+            .catch(() => {
+                /* errors already surfaced via setError */
+            })
+            .finally(() => {
+                setReloadPending(false);
+            });
+    }, [loadUsers]);
 
     useEffect(() => {
         void loadUsers();
@@ -195,7 +251,13 @@ export default function DiscoverPage() {
 
         swipeQueueRef.current.add(user.id);
         setSwipeError(null);
-        setUsers((prev) => prev.filter((candidate) => candidate.id !== user.id));
+        let deckEmptyAfterSwipe = false;
+        setUsers((prev) => {
+            const next = prev.filter((candidate) => candidate.id !== user.id);
+            deckEmptyAfterSwipe = next.length === 0;
+            return next;
+        });
+        let restored = false;
 
         try {
             await apiClient.post("/api/swipes", {
@@ -209,6 +271,7 @@ export default function DiscoverPage() {
 
             if (status !== 409) {
                 setUsers((prev) => [user, ...prev]);
+                restored = true;
                 console.error("Swipe submission failed", err);
             }
 
@@ -220,7 +283,16 @@ export default function DiscoverPage() {
         } finally {
             swipeQueueRef.current.delete(user.id);
         }
-    }, []);
+
+        if (deckEmptyAfterSwipe && !restored && !autoReloadingRef.current) {
+            autoReloadingRef.current = true;
+            try {
+                await loadUsers({ fallbackToCached: true, showSpinner: false });
+            } finally {
+                autoReloadingRef.current = false;
+            }
+        }
+    }, [loadUsers]);
 
     const handleSwipeWrapper = useCallback(
         (direction: string, user: DiscoverUser) => {
@@ -266,9 +338,14 @@ export default function DiscoverPage() {
                     </p>
                     <button
                         onClick={resetDeck}
-                        className="mt-6 inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-800"
+                        disabled={reloadPending || loading}
+                        className={`mt-6 inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-white shadow-lg transition ${
+                            reloadPending || loading
+                                ? "bg-slate-400 cursor-wait"
+                                : "bg-slate-900 hover:bg-slate-800"
+                        }`}
                     >
-                        Reload deck
+                        {reloadPending || loading ? "Reloading…" : "Reload deck"}
                     </button>
                 </div>
             );

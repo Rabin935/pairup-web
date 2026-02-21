@@ -35,6 +35,8 @@ interface ChatMessage {
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? "";
 const MATCHES_ENDPOINT = process.env.NEXT_PUBLIC_MATCHES_ENDPOINT ?? "/api/conversations";
 const NEW_MATCHES_ENDPOINT = process.env.NEXT_PUBLIC_NEW_MATCHES_ENDPOINT ?? "/api/matches/new";
+const LIKE_REQUESTS_ENDPOINT = process.env.NEXT_PUBLIC_LIKE_REQUESTS_ENDPOINT ?? "/api/likes/pending";
+const LIKE_RESPOND_ENDPOINT = process.env.NEXT_PUBLIC_LIKE_RESPOND_ENDPOINT ?? "/api/likes";
 
 const gradientPalette = [
   "from-violet-400 to-violet-700",
@@ -80,6 +82,17 @@ const readIdentifier = (value: unknown): string | undefined => {
   return undefined;
 };
 
+const deriveUserId = (value: unknown): string | null => {
+  if (!isRecord(value)) return null;
+  return (
+    readIdentifier(value.id) ??
+    readIdentifier(value.userId) ??
+    readIdentifier(value._id) ??
+    readIdentifier(value.uid) ??
+    null
+  );
+};
+
 const hashString = (value: string) => {
   let hash = 0;
   for (let i = 0; i < value.length; i += 1) {
@@ -114,7 +127,9 @@ const extractTag = (source?: LooseRecord | null) => {
   if (!source) return undefined;
   const interests = source.interests;
   if (Array.isArray(interests)) {
-    const chip = interests.find((item): item is string => typeof item === "string" && item.trim().length);
+    const chip = interests.find(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    );
     if (chip) return chip;
   }
   if (typeof interests === "string" && interests.trim().length) {
@@ -154,14 +169,7 @@ const resolveParticipant = (record: LooseRecord, currentUserId?: string | null):
     const participants = record.participants.filter((item): item is LooseRecord => isRecord(item));
     if (!participants.length) return null;
     if (currentUserId) {
-      const other = participants.find((entry) => {
-        const id =
-          readIdentifier(entry.id) ??
-          readIdentifier(entry.userId) ??
-          readIdentifier(entry._id) ??
-          readIdentifier(entry.uid);
-        return id !== currentUserId;
-      });
+      const other = participants.find((entry) => deriveUserId(entry) !== currentUserId);
       if (other) return other;
     }
     return participants[0];
@@ -199,13 +207,7 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
     readIdentifier(entry.threadId) ??
     `match-${index}`;
   const conversationId = readIdentifier(entry.conversationId) ?? recordId;
-  const participantId =
-    (participant &&
-      (readIdentifier(participant.id) ??
-        readIdentifier(participant.userId) ??
-        readIdentifier(participant._id) ??
-        readIdentifier(participant.uid))) ||
-    conversationId;
+  const participantId = deriveUserId(participant) ?? conversationId;
 
   const firstname =
     readString(participant?.firstname) ?? readString(participant?.firstName) ?? readString(entry.firstname) ?? readString(entry.firstName);
@@ -413,6 +415,55 @@ const MessageCard = ({ match, active, onClick, index }: { match: Match; active: 
     </button>
   );
 };
+
+const PendingRequestCard = ({
+  request,
+  onAccept,
+  onDecline,
+  busy,
+}: {
+  request: Match;
+  onAccept: () => void;
+  onDecline: () => void;
+  busy?: "accept" | "decline" | null;
+}) => (
+  <div className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl border border-violet-100 bg-gradient-to-br from-white to-violet-50/60">
+    <Avatar letter={request.avatar} color={request.avatarColor} online={request.online} size="sm" verified={request.verified} />
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center justify-between">
+        <p className="font-semibold text-sm text-gray-900 truncate">{request.name}</p>
+        <span className="text-[11px] text-gray-400 flex-shrink-0">{request.time ?? "Just now"}</span>
+      </div>
+      <p className="text-xs text-gray-500 mt-1 truncate">
+        Wants to match with you · {request.tag ?? "Great vibes"}
+      </p>
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={onDecline}
+          disabled={Boolean(busy)}
+          className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+            busy
+              ? "border-gray-200 text-gray-400 bg-gray-50 cursor-wait"
+              : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
+          }`}
+        >
+          Decline
+        </button>
+        <button
+          onClick={onAccept}
+          disabled={Boolean(busy)}
+          className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold text-white transition-transform ${
+            busy
+              ? "bg-violet-300 cursor-wait"
+              : "bg-gradient-to-r from-violet-500 to-violet-700 hover:scale-[1.01] shadow-md shadow-violet-200/50"
+          }`}
+        >
+          {busy === "accept" ? "Matching…" : "Accept & Match"}
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 const EmptyState = () => (
   <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8 py-20">
@@ -646,59 +697,86 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
 
 export default function MessagesPage() {
   const { user } = useAuth();
+  const currentUserId = useMemo(() => deriveUserId(user), [user]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [newMatches, setNewMatches] = useState<Match[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<Match[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(true);
   const [matchesError, setMatchesError] = useState<string | null>(null);
+  const [pendingError, setPendingError] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [selectedMatchFallback, setSelectedMatchFallback] = useState<Match | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "online">("all");
+  const [requestActionState, setRequestActionState] = useState<Record<string, "accept" | "decline" | null>>({});
+  const [requestActionMessage, setRequestActionMessage] = useState<string | null>(null);
 
   const loadMatches = useCallback(async () => {
-    if (!user?.id) return;
+    if (!currentUserId) {
+      setMatches([]);
+      setNewMatches([]);
+      setPendingRequests([]);
+      setMatchesError(null);
+      setPendingError(null);
+      setMatchesLoading(false);
+      return;
+    }
     setMatchesLoading(true);
     setMatchesError(null);
+    setPendingError(null);
 
     try {
-      const [threads, incoming] = await Promise.allSettled([
+      const [threads, incoming, pending] = await Promise.allSettled([
         apiClient.get(MATCHES_ENDPOINT),
         apiClient.get(NEW_MATCHES_ENDPOINT),
+        apiClient.get(LIKE_REQUESTS_ENDPOINT),
       ]);
 
       if (threads.status !== "fulfilled") {
         throw threads.reason ?? new Error("Unable to load conversations");
       }
 
-      const normalized = normalizeMatchesPayload(threads.value.data, user.id);
+      const normalized = normalizeMatchesPayload(threads.value.data, currentUserId);
       setMatches(normalized.matches);
 
       let computedNewMatches = normalized.newMatches;
       if (incoming.status === "fulfilled") {
-        computedNewMatches = extractMatchList(incoming.value.data, user.id);
+        computedNewMatches = extractMatchList(incoming.value.data, currentUserId);
       } else if (incoming.status === "rejected") {
         console.warn("Unable to load new matches", incoming.reason);
       }
       setNewMatches(computedNewMatches);
+
+      if (pending.status === "fulfilled") {
+        setPendingRequests(extractMatchList(pending.value.data, currentUserId));
+      } else if (pending.status === "rejected") {
+        console.warn("Unable to load pending requests", pending.reason);
+        setPendingRequests([]);
+        setPendingError("Unable to load likes waiting for your response.");
+      }
     } catch (error) {
       console.error("Failed to load matches", error);
       setMatches([]);
       setNewMatches([]);
+      setPendingRequests([]);
       setMatchesError("Unable to load your matches right now. Please try again.");
+      setPendingError("Unable to load likes waiting for your response.");
     } finally {
       setMatchesLoading(false);
     }
-  }, [user?.id]);
+  }, [currentUserId]);
 
   useEffect(() => {
-    if (!user?.id) {
+    if (!currentUserId) {
       setMatches([]);
       setNewMatches([]);
+      setPendingRequests([]);
+      setPendingError(null);
       setMatchesLoading(false);
       return;
     }
     void loadMatches();
-  }, [loadMatches, user?.id]);
+  }, [currentUserId, loadMatches]);
 
   const handleSelect = useCallback(
     (match: Match) => {
@@ -745,6 +823,38 @@ export default function MessagesPage() {
 
   const totalUnread = useMemo(() => matches.reduce((total, match) => total + match.unread, 0), [matches]);
   const onlineCount = useMemo(() => matches.filter((match) => match.online).length, [matches]);
+
+  const handleRequestDecision = useCallback(
+    async (request: Match, action: "accept" | "decline") => {
+      if (!currentUserId) {
+        setRequestActionMessage("Log in to respond to match requests.");
+        return;
+      }
+
+      setRequestActionState((prev) => ({ ...prev, [request.id]: action }));
+      setRequestActionMessage(null);
+
+      try {
+        await apiClient.post(`${LIKE_RESPOND_ENDPOINT}/${request.id}/${action}`, {
+          matchId: request.id,
+          conversationId: request.conversationId,
+          userId: currentUserId,
+        });
+
+        if (action === "accept") {
+          await loadMatches();
+        } else {
+          setPendingRequests((prev) => prev.filter((item) => item.id !== request.id));
+        }
+      } catch (error) {
+        console.error("Unable to respond to match request", error);
+        setRequestActionMessage("Unable to update that request. Please try again.");
+      } finally {
+        setRequestActionState((prev) => ({ ...prev, [request.id]: null }));
+      }
+    },
+    [currentUserId, loadMatches]
+  );
 
   return (
     <>
@@ -813,6 +923,55 @@ export default function MessagesPage() {
         </header>
 
         <div className="max-w-5xl mx-auto w-full px-5 py-6 flex flex-col gap-6">
+          <section className="bg-white rounded-2xl border border-violet-100 shadow-sm shadow-violet-50/60 overflow-hidden fade-up">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <div>
+                <h2 className="font-display font-bold text-gray-900 text-base">Match Requests</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {matchesLoading ? "Checking for new likes…" : `${pendingRequests.length} people waiting for your response`}
+                </p>
+              </div>
+              <button onClick={() => void loadMatches()} className="text-xs text-violet-600 font-semibold hover:text-violet-800 transition-colors">
+                Refresh
+              </button>
+            </div>
+
+            {requestActionMessage && (
+              <div className="mx-5 mb-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-600">
+                {requestActionMessage}
+              </div>
+            )}
+
+            {pendingError && (
+              <div className="mx-5 mb-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
+                {pendingError}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3 px-5 pb-5">
+              {matchesLoading ? (
+                Array.from({ length: 2 }).map((_, index) => (
+                  <div key={index} className="h-24 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
+                ))
+              ) : pendingRequests.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-xs text-gray-400">
+                  <span className="text-2xl mb-1">🌟</span>
+                  No new match requests right now — keep swiping!
+                </div>
+              ) : (
+                pendingRequests.map((request) => (
+                  <PendingRequestCard
+                    key={request.id}
+                    request={request}
+                    busy={requestActionState[request.id] ?? null}
+                    onAccept={() => void handleRequestDecision(request, "accept")}
+                    onDecline={() => void handleRequestDecision(request, "decline")}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+
           <section className="bg-white rounded-2xl border border-violet-100 shadow-sm shadow-violet-50/60 overflow-hidden fade-up">
             <div className="flex items-center justify-between px-5 pt-5 pb-3">
               <div>
@@ -916,7 +1075,7 @@ export default function MessagesPage() {
                 <MiniChat
                   match={activeMatch}
                   conversationId={activeConversationId}
-                  currentUserId={user?.id ?? null}
+                  currentUserId={currentUserId}
                   onClose={() => {
                     setSelectedMatchId(null);
                     setSelectedMatchFallback(null);
@@ -955,7 +1114,7 @@ export default function MessagesPage() {
             <MiniChat
               match={activeMatch}
               conversationId={activeConversationId}
-              currentUserId={user?.id ?? null}
+              currentUserId={currentUserId}
               onClose={() => {
                 setSelectedMatchId(null);
                 setSelectedMatchFallback(null);

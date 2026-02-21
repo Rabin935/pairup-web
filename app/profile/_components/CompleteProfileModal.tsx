@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import apiClient from "@/lib/api";
 
 type InitialProfileData = {
+    firstname?: string;
+    lastname?: string;
+    email?: string;
+    phone?: string;
     gender?: string;
     age?: number;
     location?: string;
@@ -23,6 +27,10 @@ interface CompleteProfileModalProps {
 export default function CompleteProfileModal({ open, onClose, onSuccess, initialData }: CompleteProfileModalProps) {
     const router = useRouter();
     const isEditMode = Boolean(initialData);
+    const [firstname, setFirstname] = useState(initialData?.firstname || "");
+    const [lastname, setLastname] = useState(initialData?.lastname || "");
+    const [email, setEmail] = useState(initialData?.email || "");
+    const [phone, setPhone] = useState(initialData?.phone || "");
     const [gender, setGender] = useState(initialData?.gender || "");
     const [age, setAge] = useState(initialData?.age?.toString() || "");
     const [location, setLocation] = useState(initialData?.location || "");
@@ -42,6 +50,10 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
 
     useEffect(() => {
         if (open) {
+            setFirstname(initialData?.firstname || "");
+            setLastname(initialData?.lastname || "");
+            setEmail(initialData?.email || "");
+            setPhone(initialData?.phone || "");
             setGender(initialData?.gender || "");
             setAge(initialData?.age ? String(initialData.age) : "");
             setLocation(initialData?.location || "");
@@ -74,6 +86,10 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
 
         try {
             const formData = new FormData();
+            if (firstname) formData.append("firstname", firstname);
+            if (lastname) formData.append("lastname", lastname);
+            if (email) formData.append("email", email);
+            if (phone) formData.append("phone", phone);
             if (gender) formData.append("gender", gender);
             if (age) formData.append("age", age);
             if (location) formData.append("location", location);
@@ -105,8 +121,8 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
     if (!open) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur">
-            <div className="relative w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur px-4">
+            <div className="relative w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
                 <button
                     onClick={onClose}
                     className="absolute right-6 top-6 text-slate-400 hover:text-slate-600"
@@ -133,6 +149,54 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-5">
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            First name
+                            <input
+                                type="text"
+                                value={firstname}
+                                onChange={(event) => setFirstname(event.target.value)}
+                                placeholder="e.g. Jordan"
+                                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                            />
+                        </label>
+
+                        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Last name
+                            <input
+                                type="text"
+                                value={lastname}
+                                onChange={(event) => setLastname(event.target.value)}
+                                placeholder="e.g. Avery"
+                                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                            />
+                        </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Email
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(event) => setEmail(event.target.value)}
+                                placeholder="you@example.com"
+                                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                            />
+                        </label>
+
+                        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                            Phone
+                            <input
+                                type="tel"
+                                value={phone}
+                                onChange={(event) => setPhone(event.target.value)}
+                                placeholder="+1 555 123 4567"
+                                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                            />
+                        </label>
+                    </div>
+
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                         <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
                             Gender
