@@ -1,17 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import {
   ArrowLeft,
   Flame,
   Heart,
+  ImagePlus,
   Info,
+  Loader2,
   MessageCircle,
-  Paperclip,
   Phone,
   Search,
   Send,
   Star,
+  Trash2,
   Video,
 } from "lucide-react";
 import { io, type Socket } from "socket.io-client";
@@ -36,6 +38,7 @@ interface Match {
   time?: string;
   unread: number;
   online: boolean;
+  lastSeen?: string;
   verified: boolean;
   tag?: string;
 }
@@ -44,7 +47,9 @@ interface ChatMessage {
   id: string;
   conversationId: string;
   senderId: string;
+  receiverId?: string;
   body: string;
+  imageUrl?: string;
   createdAt: string;
   clientMessageId?: string;
   status?: "pending" | "sent";
@@ -366,6 +371,10 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
     readBoolean(entry.online) ??
     readBoolean(entry.isOnline) ??
     false;
+  const lastSeen =
+    readString(participant?.lastSeen) ??
+    readString(entry.lastSeen) ??
+    (online ? undefined : readString(participant?.updatedAt));
   const verified = readBoolean(participant?.verified) ?? readBoolean(entry.verified) ?? false;
   const tag = extractTag(participant) ?? "Match";
 
@@ -381,6 +390,7 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
     ...(timestamp ? { time: formatRelativeTime(timestamp) } : {}),
     unread: Math.max(0, Math.trunc(unread)),
     online,
+    lastSeen,
     verified,
     tag,
   };
@@ -465,16 +475,7 @@ const normalizePendingInvitesPayload = (payload: unknown, currentUserId?: string
     requestType: "invite" as const,
   }));
 
-const normalizeMessagesPayload = (payload: unknown): ChatMessage[] => {
-  if (Array.isArray(payload)) return payload as ChatMessage[];
-  if (!isRecord(payload)) return [];
-  if (Array.isArray(payload.messages)) return payload.messages as ChatMessage[];
-  if (isRecord(payload.data) && Array.isArray(payload.data.messages)) return payload.data.messages as ChatMessage[];
-  if (Array.isArray(payload.data)) return payload.data as ChatMessage[];
-  return [];
-};
-
-const normalizeSocketMessagePayload = (payload: unknown): ChatMessage | null => {
+const normalizeMessageRecord = (payload: unknown): ChatMessage | null => {
   if (!isRecord(payload)) return null;
 
   const id =
@@ -483,23 +484,50 @@ const normalizeSocketMessagePayload = (payload: unknown): ChatMessage | null => 
     readIdentifier(payload.clientMessageId);
   const conversationId = readIdentifier(payload.conversationId);
   const senderId = readIdentifier(payload.senderId) ?? readIdentifier(payload.sender);
-  const body = readString(payload.body) ?? readString(payload.text);
+  const receiverId = readIdentifier(payload.receiverId) ?? readIdentifier(payload.receiver);
+  const body = readString(payload.body) ?? readString(payload.text) ?? "";
+  const imageUrl = readString(payload.imageUrl) ?? readString(payload.image) ?? readString(payload.photo);
   const createdAt = readString(payload.createdAt) ?? new Date().toISOString();
   const clientMessageId = readIdentifier(payload.clientMessageId);
 
-  if (!id || !conversationId || !senderId || !body) {
-    return null;
-  }
+  if (!id || !conversationId || !senderId) return null;
+  if (!body && !imageUrl) return null;
 
   return {
     id,
     conversationId,
     senderId,
+    receiverId,
     body,
+    imageUrl,
     createdAt,
     clientMessageId,
     status: "sent",
   };
+};
+
+const normalizeMessagesPayload = (payload: unknown): ChatMessage[] => {
+  if (Array.isArray(payload)) {
+    return payload
+      .map((entry) => normalizeMessageRecord(entry))
+      .filter((entry): entry is ChatMessage => Boolean(entry));
+  }
+  if (!isRecord(payload)) return [];
+
+  const candidates = [
+    Array.isArray(payload.messages) ? payload.messages : null,
+    isRecord(payload.data) && Array.isArray(payload.data.messages) ? payload.data.messages : null,
+    Array.isArray(payload.data) ? payload.data : null,
+  ];
+
+  const source = candidates.find((collection) => Array.isArray(collection)) ?? [];
+  return source
+    .map((entry) => normalizeMessageRecord(entry))
+    .filter((entry): entry is ChatMessage => Boolean(entry));
+};
+
+const normalizeSocketMessagePayload = (payload: unknown): ChatMessage | null => {
+  return normalizeMessageRecord(payload);
 };
 
 const buildMatchFromInviteEvent = (payload: unknown): Match | null => {
@@ -630,7 +658,7 @@ const NewMatchBubble = ({ match, onClick, disabled }: { match: Match; onClick: (
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`w-full p-4 rounded-2xl bg-white border border-violet-100 hover:border-violet-300 hover:bg-violet-50 transition-all duration-200 hover:shadow-lg cursor-pointer group text-left ${
+    className={`w-full p-4 rounded-2xl bg-white border border-violet-100 hover:border-violet-300 hover:bg-violet-50 transition-all duration-200 hover:shadow-lg cursor-pointer group text-left dark:border-slate-800 dark:bg-slate-900 dark:hover:border-violet-500 dark:hover:bg-slate-800 ${
       disabled ? "opacity-50 cursor-not-allowed" : ""
     }`}
   >
@@ -645,9 +673,9 @@ const NewMatchBubble = ({ match, onClick, disabled }: { match: Match; onClick: (
         alt={match.name}
       />
       <div className="flex-1 min-w-0">
-        <h3 className="font-bold text-gray-900">{match.name}</h3>
-        <p className="text-sm text-gray-600 truncate">{match.lastMessage ?? "Say hello!"}</p>
-        <p className="text-xs text-gray-500 mt-1">{match.time ?? "Recently"}</p>
+        <h3 className="font-bold text-gray-900 dark:text-slate-100">{match.name}</h3>
+        <p className="text-sm text-gray-600 truncate dark:text-slate-300">{match.lastMessage ?? "Say hello!"}</p>
+        <p className="text-xs text-gray-500 mt-1 dark:text-slate-400">{match.time ?? "Recently"}</p>
       </div>
       <Heart size={18} className="text-violet-400 flex-shrink-0" />
     </div>
@@ -663,8 +691,8 @@ const MessageCard = ({ match, active, onClick, index }: { match: Match; active: 
       onClick={onClick}
       className={`w-full p-4 rounded-2xl border transition-all duration-200 cursor-pointer group text-left ${
         active
-          ? "bg-gradient-to-r from-violet-100 to-violet-50 border-violet-300 shadow-lg"
-          : "bg-white border-violet-100 hover:border-violet-300 hover:bg-violet-50 hover:shadow-lg"
+          ? "bg-gradient-to-r from-violet-100 to-violet-50 border-violet-300 shadow-lg dark:from-slate-800 dark:to-slate-900 dark:border-violet-500"
+          : "bg-white border-violet-100 hover:border-violet-300 hover:bg-violet-50 hover:shadow-lg dark:bg-slate-900 dark:border-slate-800 dark:hover:border-violet-500 dark:hover:bg-slate-800"
       }`}
       style={{ animation: `slideIn 0.4s ease-out ${index * 0.1}s backwards` }}
     >
@@ -680,10 +708,10 @@ const MessageCard = ({ match, active, onClick, index }: { match: Match; active: 
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="font-bold text-gray-900">{match.name}</h3>
-            <span className="text-xs text-gray-500">{timeLabel}</span>
+            <h3 className="font-bold text-gray-900 dark:text-slate-100">{match.name}</h3>
+            <span className="text-xs text-gray-500 dark:text-slate-400">{timeLabel}</span>
           </div>
-          <p className="text-sm text-gray-600 truncate">{preview}</p>
+          <p className="text-sm text-gray-600 truncate dark:text-slate-300">{preview}</p>
         </div>
         {match.unread > 0 && (
           <div className="w-6 h-6 rounded-full bg-gradient-to-r from-violet-500 to-violet-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -706,7 +734,7 @@ const PendingRequestCard = ({
   onDecline: () => void;
   busy?: "accept" | "decline" | null;
 }) => (
-  <div className="p-4 rounded-2xl bg-gradient-to-br from-violet-50 to-white border border-violet-200 hover:border-violet-300 transition-all duration-200 hover:shadow-lg">
+  <div className="p-4 rounded-2xl bg-gradient-to-br from-violet-50 to-white border border-violet-200 hover:border-violet-300 transition-all duration-200 hover:shadow-lg dark:from-slate-800 dark:to-slate-900 dark:border-slate-700 dark:hover:border-violet-500">
     <div className="flex gap-3 mb-3">
       <Avatar
         letter={request.avatar}
@@ -718,8 +746,8 @@ const PendingRequestCard = ({
         alt={request.name}
       />
       <div className="flex-1 min-w-0">
-        <h3 className="font-bold text-gray-900 truncate">{request.name}</h3>
-        <p className="text-xs text-gray-600">{request.time ?? "Just now"}</p>
+        <h3 className="font-bold text-gray-900 truncate dark:text-slate-100">{request.name}</h3>
+        <p className="text-xs text-gray-600 dark:text-slate-300">{request.time ?? "Just now"}</p>
         <div className="flex items-center gap-1 mt-1">
           <Flame size={14} className="text-orange-500" />
           <span className="text-xs font-semibold text-orange-600">{request.tag ?? "Great match"}</span>
@@ -733,8 +761,8 @@ const PendingRequestCard = ({
         disabled={Boolean(busy)}
         className={`flex-1 py-2 rounded-lg border font-semibold transition-all duration-200 text-sm ${
           busy
-            ? "border-gray-200 text-gray-400 bg-gray-50 cursor-wait"
-            : "border-gray-300 text-gray-700 hover:bg-gray-50"
+            ? "border-gray-200 text-gray-400 bg-gray-50 cursor-wait dark:border-slate-700 dark:text-slate-500 dark:bg-slate-800"
+            : "border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
         }`}
       >
         Decline
@@ -753,11 +781,11 @@ const PendingRequestCard = ({
 );
 
 const EmptyState = () => (
-  <div className="hidden md:flex flex-1 items-center justify-center bg-white rounded-3xl border border-violet-100 shadow-xl">
+  <div className="hidden md:flex flex-1 items-center justify-center bg-white rounded-3xl border border-violet-100 shadow-xl dark:bg-slate-900 dark:border-slate-800">
     <div className="text-center px-8">
-      <MessageCircle size={64} className="mx-auto text-gray-300 mb-4" />
-      <h3 className="text-2xl font-bold text-gray-900 mb-2">No chat selected</h3>
-      <p className="text-gray-600">Select a chat to start messaging</p>
+      <MessageCircle size={64} className="mx-auto text-gray-300 dark:text-slate-600 mb-4" />
+      <h3 className="text-2xl font-bold text-gray-900 dark:text-slate-100 mb-2">No chat selected</h3>
+      <p className="text-gray-600 dark:text-slate-400">Select a chat to start messaging</p>
     </div>
   </div>
 );
@@ -775,13 +803,56 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [socketReady, setSocketReady] = useState(false);
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const [isPartnerOnline, setIsPartnerOnline] = useState(match.online);
+  const [partnerLastSeen, setPartnerLastSeen] = useState<string | undefined>(match.lastSeen);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    setIsPartnerOnline(match.online);
+    setPartnerLastSeen(match.lastSeen);
+  }, [match.lastSeen, match.online]);
+
+  const stopTyping = useCallback(() => {
+    if (!socketRef.current || !match.participantId) return;
+
+    socketRef.current.emit("typing:stop", {
+      conversationId,
+      receiverId: match.participantId,
+    });
+
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  }, [conversationId, match.participantId]);
+
+  const emitTyping = useCallback(() => {
+    if (!socketRef.current || !match.participantId || !socketReady) return;
+
+    socketRef.current.emit("typing:start", {
+      conversationId,
+      receiverId: match.participantId,
+    });
+
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = window.setTimeout(() => {
+      stopTyping();
+    }, 1200);
+  }, [conversationId, match.participantId, socketReady, stopTyping]);
 
   useEffect(() => {
     let isMounted = true;
@@ -849,12 +920,55 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
             return updated;
           }
         }
+        if (prev.some((item) => item.id === normalizedIncoming.id)) {
+          return prev;
+        }
         return [...prev, normalizedIncoming];
       });
     });
 
+    socket.on("typing:start", (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const incomingConversationId = readIdentifier(payload.conversationId);
+      const incomingUserId = readIdentifier(payload.userId);
+      if (incomingConversationId !== conversationId) return;
+      if (!incomingUserId || incomingUserId !== match.participantId) return;
+      setIsPartnerTyping(true);
+    });
+
+    socket.on("typing:stop", (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const incomingConversationId = readIdentifier(payload.conversationId);
+      const incomingUserId = readIdentifier(payload.userId);
+      if (incomingConversationId !== conversationId) return;
+      if (!incomingUserId || incomingUserId !== match.participantId) return;
+      setIsPartnerTyping(false);
+    });
+
+    socket.on("message:deleted", (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const deletedMessageId = readIdentifier(payload.messageId);
+      const deletedConversationId = readIdentifier(payload.conversationId);
+      if (!deletedMessageId || deletedConversationId !== conversationId) return;
+      setMessages((prev) => prev.filter((message) => message.id !== deletedMessageId));
+    });
+
+    socket.on("presence:update", (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const presenceUserId = readIdentifier(payload.userId);
+      if (!presenceUserId || presenceUserId !== match.participantId) return;
+
+      const status = readString(payload.status);
+      const lastSeen = readString(payload.lastSeen);
+      setIsPartnerOnline(status === "online");
+      if (lastSeen) {
+        setPartnerLastSeen(lastSeen);
+      }
+    });
+
     socket.on("disconnect", () => {
       setSocketReady(false);
+      setIsPartnerTyping(false);
     });
     socket.on("connect_error", (err) => {
       console.error("[socket:chat] connect_error", err.message);
@@ -862,14 +976,27 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
 
     return () => {
       isMounted = false;
+      stopTyping();
       socket.emit("leaveConversation", { conversationId, userId: currentUserId });
       socket.off("receiveMessage");
+      socket.off("typing:start");
+      socket.off("typing:stop");
+      socket.off("message:deleted");
+      socket.off("presence:update");
       socket.off("connect_error");
       socket.disconnect();
       socketRef.current = null;
       setSocketReady(false);
+      setIsPartnerTyping(false);
     };
-  }, [authToken, conversationId, currentUserId]);
+  }, [authToken, conversationId, currentUserId, match.participantId, stopTyping]);
+
+  useEffect(
+    () => () => {
+      stopTyping();
+    },
+    [stopTyping]
+  );
 
   const handleSend = () => {
     if (!currentUserId) {
@@ -882,6 +1009,7 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
     }
     const trimmed = messageInput.trim();
     if (!trimmed || !socketRef.current || !socketReady) return;
+    stopTyping();
 
     const clientMessageId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2);
 
@@ -932,6 +1060,68 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
     );
   };
 
+  const handleUploadImage = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!currentUserId) {
+      setError("Log in to send images.");
+      return;
+    }
+    if (!match.participantId) {
+      setError("Unable to identify the receiver for this conversation.");
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("conversationId", conversationId);
+      formData.append("senderId", currentUserId);
+      formData.append("receiverId", match.participantId);
+      formData.append("image", file);
+
+      const response = await apiClient.post("/api/messages", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const normalized = normalizeSocketMessagePayload(response.data?.message);
+      if (!normalized) return;
+
+      setMessages((prev) => {
+        if (prev.some((message) => message.id === normalized.id)) {
+          return prev;
+        }
+        return [...prev, normalized];
+      });
+    } catch (uploadError) {
+      console.error("Unable to upload image message", uploadError);
+      setError("Unable to upload image. Please try again.");
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    const confirmed = window.confirm("Delete this message?");
+    if (!confirmed) return;
+
+    setDeletingMessageId(messageId);
+    setError(null);
+
+    try {
+      await apiClient.delete(`/api/messages/${encodeURIComponent(messageId)}`);
+      setMessages((prev) => prev.filter((message) => message.id !== messageId));
+    } catch (deleteError) {
+      console.error("Unable to delete message", deleteError);
+      setError("Unable to delete message. Please try again.");
+    } finally {
+      setDeletingMessageId(null);
+    }
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -939,28 +1129,45 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
     }
   };
 
+  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setMessageInput(event.target.value);
+    if (event.target.value.trim()) {
+      emitTyping();
+    } else {
+      stopTyping();
+    }
+  };
+
+  const statusLabel = isPartnerTyping
+    ? "Typing..."
+    : isPartnerOnline
+      ? "Active now"
+      : partnerLastSeen
+        ? `Last seen ${formatRelativeTime(partnerLastSeen)}`
+        : "Active recently";
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      <div className="flex items-center justify-between p-4 sm:p-6 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-white">
+      <div className="flex items-center justify-between p-4 sm:p-6 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-white dark:border-slate-800 dark:from-slate-800 dark:to-slate-900">
         <div className="flex items-center gap-3 flex-1">
           <button
             onClick={onClose}
-            className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors dark:hover:bg-slate-700"
           >
-            <ArrowLeft size={20} className="text-gray-700" />
+            <ArrowLeft size={20} className="text-gray-700 dark:text-slate-200" />
           </button>
           <Avatar
             letter={match.avatar}
             color={match.avatarColor}
-            online={match.online}
+            online={isPartnerOnline}
             size="sm"
             verified={match.verified}
             imageUrl={match.profileImage}
             alt={match.name}
           />
           <div>
-            <h2 className="font-bold text-gray-900">{match.name}</h2>
-            <p className="text-xs text-gray-600">{match.online ? "Active now" : "Active recently"}</p>
+            <h2 className="font-bold text-gray-900 dark:text-slate-100">{match.name}</h2>
+            <p className="text-xs text-gray-600 dark:text-slate-300">{statusLabel}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -976,16 +1183,16 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-gradient-to-b from-white to-violet-50/20 custom-scroll">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-gradient-to-b from-white to-violet-50/20 custom-scroll dark:from-slate-900 dark:to-slate-900">
         {error && (
           <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-500">{error}</div>
         )}
 
         {isLoading ? (
-          <div className="text-center text-xs text-gray-400 py-6">Loading messages...</div>
+          <div className="text-center text-xs text-gray-400 dark:text-slate-500 py-6">Loading messages...</div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-6 text-sm text-gray-500">
-            <MessageCircle size={24} className="text-gray-400" />
+          <div className="flex flex-col items-center gap-2 py-6 text-sm text-gray-500 dark:text-slate-400">
+            <MessageCircle size={24} className="text-gray-400 dark:text-slate-500" />
             <p>No messages yet. Say hi!</p>
           </div>
         ) : (
@@ -999,14 +1206,32 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
                 className={`max-w-xs lg:max-w-md px-4 py-2.5 rounded-2xl ${
                   message.senderId === currentUserId
                     ? "bg-gradient-to-r from-violet-500 to-violet-600 text-white rounded-br-none"
-                    : "bg-gray-100 text-gray-900 rounded-bl-none"
+                    : "bg-gray-100 text-gray-900 rounded-bl-none dark:bg-slate-800 dark:text-slate-100"
                 }`}
               >
-                <p className="text-sm">{message.body}</p>
+                {message.imageUrl ? (
+                  <img
+                    src={message.imageUrl}
+                    alt="Shared image"
+                    className="mb-2 max-w-[220px] max-h-64 rounded-lg object-cover"
+                  />
+                ) : null}
+                {message.body ? <p className="text-sm">{message.body}</p> : null}
                 <span className="mt-1 block text-[10px] opacity-70">
                   {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  {message.senderId === currentUserId && message.status === "pending" ? " · sending..." : ""}
+                  {message.senderId === currentUserId && message.status === "pending" ? " - sending..." : ""}
                 </span>
+                {message.senderId === currentUserId && message.status !== "pending" && (
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteMessage(message.id)}
+                    disabled={deletingMessageId === message.id}
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] opacity-80 hover:opacity-100"
+                  >
+                    <Trash2 size={12} />
+                    {deletingMessageId === message.id ? "Deleting..." : "Delete"}
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -1014,18 +1239,31 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
         <div ref={bottomRef} />
       </div>
 
-      <div className="p-4 sm:p-6 border-t border-violet-100 bg-white">
+      <div className="p-4 sm:p-6 border-t border-violet-100 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="flex gap-3">
-          <button className="p-2.5 hover:bg-violet-100 rounded-lg transition-colors text-violet-600 flex-shrink-0">
-            <Paperclip size={20} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleUploadImage}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingImage || !currentUserId || !match.participantId}
+            className="p-2.5 hover:bg-violet-100 rounded-lg transition-colors text-violet-600 flex-shrink-0 disabled:opacity-50"
+            title="Upload image"
+          >
+            {isUploadingImage ? <Loader2 size={20} className="animate-spin" /> : <ImagePlus size={20} />}
           </button>
           <input
             type="text"
             value={messageInput}
-            onChange={(event) => setMessageInput(event.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={`Message ${match.name}...`}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-500 border border-gray-200 focus:outline-none focus:border-violet-500 focus:bg-white transition-all duration-200"
+            className="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 border border-gray-200 focus:outline-none focus:border-violet-500 focus:bg-white transition-all duration-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:focus:bg-slate-900"
             disabled={!socketReady || !currentUserId}
           />
           <button
@@ -1098,7 +1336,7 @@ export default function MessagesPage() {
         const target = items[index];
         const updated: Match = {
           ...target,
-          lastMessage: message.body,
+          lastMessage: message.body || (message.imageUrl ? "Photo" : target.lastMessage),
           time: formatRelativeTime(message.createdAt),
           unread: shouldIncreaseUnread ? target.unread + 1 : target.unread,
         };
@@ -1289,6 +1527,29 @@ export default function MessagesPage() {
       applyRecentMessageToLists(normalized);
     };
 
+    const handlePresenceUpdate = (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const presenceUserId = readIdentifier(payload.userId);
+      if (!presenceUserId) return;
+
+      const status = readString(payload.status);
+      const online = status === "online";
+      const lastSeen = readString(payload.lastSeen);
+
+      const updatePresence = (items: Match[]) =>
+        items.map((item) => {
+          if (item.participantId !== presenceUserId) return item;
+          return {
+            ...item,
+            online,
+            ...(lastSeen ? { lastSeen } : {}),
+          };
+        });
+
+      setMatches((prev) => updatePresence(prev));
+      setNewMatches((prev) => updatePresence(prev));
+    };
+
     socket.on("connect", () => {
       console.log("[socket] connected", {
         socketId: socket.id,
@@ -1310,6 +1571,7 @@ export default function MessagesPage() {
     socket.on("chat:match:created", handleMatchCreated);
     socket.on("invite:rejected", handleRemoval);
     socket.on("receiveMessage", handleRealtimeMessage);
+    socket.on("presence:update", handlePresenceUpdate);
 
     return () => {
       socket.off("invite:created", handleInvite);
@@ -1319,6 +1581,7 @@ export default function MessagesPage() {
       socket.off("chat:match:created", handleMatchCreated);
       socket.off("invite:rejected", handleRemoval);
       socket.off("receiveMessage", handleRealtimeMessage);
+      socket.off("presence:update", handlePresenceUpdate);
       socket.off("connect");
       socket.off("disconnect");
       socket.off("connect_error");
@@ -1388,6 +1651,21 @@ export default function MessagesPage() {
         setSelectedMatchFallback(null);
         return;
       }
+
+      setMatches((prev) =>
+        prev.map((item) =>
+          item.id === selected.id || item.conversationId === selected.conversationId
+            ? { ...item, unread: 0 }
+            : item
+        )
+      );
+      setNewMatches((prev) =>
+        prev.map((item) =>
+          item.id === selected.id || item.conversationId === selected.conversationId
+            ? { ...item, unread: 0 }
+            : item
+        )
+      );
 
       setSelectedMatchId(selected.id);
       setSelectedMatchFallback(selected);
@@ -1527,7 +1805,7 @@ export default function MessagesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-violet-50/30 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-white via-violet-50/30 to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       <style>{`
         @keyframes slideIn {
           from {
@@ -1554,15 +1832,16 @@ export default function MessagesPage() {
         .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #ddd6fe; border-radius: 999px; }
+        .dark .custom-scroll::-webkit-scrollbar-thumb { background: #475569; }
       `}</style>
 
       <div className="max-w-8xl mx-auto h-screen flex flex-col">
-        <div className="sticky top-0 z-40 bg-white bg-opacity-95 backdrop-blur-lg border-b border-violet-100">
+        <div className="sticky top-0 z-40 bg-white bg-opacity-95 backdrop-blur-lg border-b border-violet-100 dark:border-slate-800 dark:bg-slate-950/90">
           <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-violet-600 font-semibold">Messages</p>
-              <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Connections</h1>
-              <p className="text-xs text-gray-500 mt-1">{matches.length} chats · {onlineCount} online</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-100">Connections</h1>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">{matches.length} chats · {onlineCount} online</p>
             </div>
             <div className="rounded-full bg-gradient-to-br from-violet-400 to-violet-600 p-3 text-white">
               <MessageCircle size={24} />
@@ -1571,8 +1850,8 @@ export default function MessagesPage() {
         </div>
 
         <div className="flex-1 flex gap-4 overflow-hidden p-4 sm:p-6">
-          <div className={`w-full md:w-96 flex flex-col bg-white rounded-3xl border border-violet-100 shadow-xl overflow-hidden ${hasActiveConversation ? "hidden md:flex" : "flex"}`}>
-            <div className="flex gap-1 p-4 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-white">
+          <div className={`w-full md:w-96 flex flex-col bg-white rounded-3xl border border-violet-100 shadow-xl overflow-hidden dark:bg-slate-900 dark:border-slate-800 ${hasActiveConversation ? "hidden md:flex" : "flex"}`}>
+            <div className="flex gap-1 p-4 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-white dark:border-slate-800 dark:from-slate-800 dark:to-slate-900">
               {([
                 { id: "requests", label: "Requests", count: pendingRequests.length },
                 { id: "new", label: "New", count: filteredNewMatches.length },
@@ -1584,12 +1863,12 @@ export default function MessagesPage() {
                   className={`flex-1 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
                     activeTab === tab.id
                       ? "bg-gradient-to-r from-violet-400 to-violet-900 text-white shadow-lg"
-                      : "text-gray-700 hover:bg-violet-50"
+                      : "text-gray-700 hover:bg-violet-50 dark:text-slate-200 dark:hover:bg-slate-800"
                   }`}
                 >
                   {tab.label}
                   {tab.count > 0 && (
-                    <span className="ml-auto bg-white text-black bg-opacity-20 px-2 py-0.5 rounded-full text-xs font-bold">
+                    <span className="ml-auto bg-white text-black bg-opacity-20 px-2 py-0.5 rounded-full text-xs font-bold dark:bg-slate-900 dark:text-slate-100">
                       {tab.count}
                     </span>
                   )}
@@ -1598,15 +1877,15 @@ export default function MessagesPage() {
             </div>
 
             {activeTab !== "requests" && (
-              <div className="p-4 border-b border-violet-100">
+              <div className="p-4 border-b border-violet-100 dark:border-slate-800">
                 <div className="relative">
-                  <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text--400" />
+                  <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
                   <input
                     type="text"
                     placeholder="Search..."
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-100 text-gray-500 border border-gray-200 focus:outline-none focus:border-violet-500 focus:bg-white transition-all duration-200"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-100 text-gray-700 border border-gray-200 focus:outline-none focus:border-violet-500 focus:bg-white transition-all duration-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:focus:bg-slate-900"
                   />
                 </div>
                 {activeTab === "chats" && (
@@ -1618,7 +1897,7 @@ export default function MessagesPage() {
                         className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
                           filter === option
                             ? "bg-violet-600 text-white"
-                            : "bg-violet-50 text-gray-600 hover:bg-violet-100"
+                            : "bg-violet-50 text-gray-600 hover:bg-violet-100 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                         }`}
                       >
                         {option}
@@ -1664,8 +1943,8 @@ export default function MessagesPage() {
                     ))
                   ) : (
                     <div className="text-center py-12">
-                      <Heart size={32} className="mx-auto text-gray-300 mb-3" />
-                      <p className="text-gray-600 font-medium">No match requests</p>
+                      <Heart size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
+                      <p className="text-gray-600 dark:text-slate-400 font-medium">No match requests</p>
                       <button
                         onClick={() => void loadMatches()}
                         className="mt-3 text-sm text-violet-600 font-semibold hover:text-violet-700"
@@ -1697,8 +1976,8 @@ export default function MessagesPage() {
                     ))
                   ) : (
                     <div className="text-center py-12">
-                      <Star size={32} className="mx-auto text-gray-300 mb-3" />
-                      <p className="text-gray-600 font-medium">No new matches</p>
+                      <Star size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
+                      <p className="text-gray-600 dark:text-slate-400 font-medium">No new matches</p>
                     </div>
                   )}
                 </div>
@@ -1731,16 +2010,16 @@ export default function MessagesPage() {
                     ))
                   ) : (
                     <div className="text-center py-12">
-                      <MessageCircle size={32} className="mx-auto text-gray-300 mb-3" />
-                      <p className="text-gray-600 font-medium">No chats yet</p>
+                      <MessageCircle size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
+                      <p className="text-gray-600 dark:text-slate-400 font-medium">No chats yet</p>
                     </div>
                   )}
                 </div>
               )}
             </div>
 
-            <div className="px-4 py-3 border-t border-violet-100 flex items-center justify-between bg-white">
-              <p className="text-xs text-gray-500">Unread: {totalUnread}</p>
+            <div className="px-4 py-3 border-t border-violet-100 flex items-center justify-between bg-white dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-xs text-gray-500 dark:text-slate-400">Unread: {totalUnread}</p>
               <button
                 className="text-xs text-violet-600 font-semibold hover:text-violet-700"
                 onClick={() => setMatches((prev) => prev.map((match) => ({ ...match, unread: 0 })))}
@@ -1751,7 +2030,7 @@ export default function MessagesPage() {
           </div>
 
           {hasActiveConversation && activeMatch && activeConversationId ? (
-            <div className="flex-1 bg-white rounded-3xl border border-violet-100 shadow-xl flex flex-col overflow-hidden">
+            <div className="flex-1 bg-white rounded-3xl border border-violet-100 shadow-xl flex flex-col overflow-hidden dark:bg-slate-900 dark:border-slate-800">
               <MiniChat
                 match={activeMatch}
                 conversationId={activeConversationId}
@@ -1770,6 +2049,7 @@ export default function MessagesPage() {
     </div>
   );
 }
+
 
 
 
