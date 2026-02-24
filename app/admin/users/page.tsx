@@ -13,6 +13,8 @@ type AdminUser = {
   gender?: string;
   location?: string;
   isBanned?: boolean;
+  banReason?: string;
+  reportCount?: number;
 };
 
 type Pagination = {
@@ -29,6 +31,7 @@ type UsersResponse = {
 };
 
 const PAGE_SIZE = 10;
+const AUTO_BAN_REASON = "Auto-banned due to excessive reports";
 
 const getUserId = (user: AdminUser): string => user._id || user.id || "";
 
@@ -262,6 +265,9 @@ export default function AdminUsersPage() {
                   Location
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Reports
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Status
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -272,13 +278,13 @@ export default function AdminUsersPage() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
                     Loading users...
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
                     No users found.
                   </td>
                 </tr>
@@ -287,15 +293,40 @@ export default function AdminUsersPage() {
                   const userId = getUserId(user);
                   const fullName = `${user.firstname || ""} ${user.lastname || ""}`.trim() || "Unnamed user";
                   const isBusy = actionUserId === userId;
+                  const reportCount = Number(user.reportCount || 0);
+                  const hasHighReports = reportCount >= 3;
+                  const isAutoBanned = user.isBanned && user.banReason === AUTO_BAN_REASON;
+                  const rowClass = user.isBanned
+                    ? "bg-red-50 hover:bg-red-100"
+                    : hasHighReports
+                    ? "bg-amber-50 hover:bg-amber-100"
+                    : "hover:bg-slate-50";
 
                   return (
-                    <tr key={userId || fullName} className="hover:bg-slate-50">
+                    <tr key={userId || fullName} className={rowClass}>
                       <td className="px-4 py-3">
-                        <p className="text-sm font-semibold text-slate-900">{fullName}</p>
+                        <p
+                          className={`text-sm font-semibold ${
+                            user.isBanned ? "text-red-800" : "text-slate-900"
+                          }`}
+                        >
+                          {fullName}
+                        </p>
                         <p className="text-sm text-slate-600">{user.email || "-"}</p>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700">{user.gender || "-"}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">{user.location || "-"}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            hasHighReports
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {reportCount}
+                        </span>
+                      </td>
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -304,6 +335,11 @@ export default function AdminUsersPage() {
                         >
                           {user.isBanned ? "Banned" : "Active"}
                         </span>
+                        {isAutoBanned && (
+                          <span className="ml-2 inline-flex rounded-full bg-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-800">
+                            Auto-banned
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
