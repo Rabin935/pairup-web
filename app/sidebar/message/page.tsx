@@ -35,8 +35,8 @@ interface ChatMessage {
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? "";
 const MATCHES_ENDPOINT = process.env.NEXT_PUBLIC_MATCHES_ENDPOINT ?? "/api/conversations";
 const NEW_MATCHES_ENDPOINT = process.env.NEXT_PUBLIC_NEW_MATCHES_ENDPOINT ?? "/api/matches/new";
-const LIKE_REQUESTS_ENDPOINT = process.env.NEXT_PUBLIC_LIKE_REQUESTS_ENDPOINT ?? "/api/likes/pending";
-const LIKE_RESPOND_ENDPOINT = process.env.NEXT_PUBLIC_LIKE_RESPOND_ENDPOINT ?? "/api/likes";
+const INVITE_REQUESTS_ENDPOINT = process.env.NEXT_PUBLIC_INVITE_REQUESTS_ENDPOINT ?? "/api/invites/pending";
+const INVITE_RESPOND_ENDPOINT = process.env.NEXT_PUBLIC_INVITE_RESPOND_ENDPOINT ?? "/api/invites";
 
 const gradientPalette = [
   "from-violet-400 to-violet-700",
@@ -158,6 +158,11 @@ const resolveParticipant = (record: LooseRecord, currentUserId?: string | null):
     "recipient",
     "peer",
     "contact",
+    "fromUser",
+    "from_user",
+    "sender",
+    "requester",
+    "preview",
   ];
 
   for (const key of candidateKeys) {
@@ -182,7 +187,18 @@ const pickCollection = (payload: unknown, depth = 0): unknown[] => {
   if (Array.isArray(payload)) return payload;
   if (!isRecord(payload) || depth > 2) return [];
 
-  const keys = ["matches", "conversations", "threads", "items", "results", "list", "users", "records", "data"];
+  const keys = [
+    "matches",
+    "invitations",
+    "conversations",
+    "threads",
+    "items",
+    "results",
+    "list",
+    "users",
+    "records",
+    "data",
+  ];
   for (const key of keys) {
     const value = payload[key];
     if (Array.isArray(value)) return value;
@@ -203,11 +219,19 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
   const recordId =
     readIdentifier(entry.id) ??
     readIdentifier(entry.matchId) ??
+    readIdentifier(entry.invitationId) ??
     readIdentifier(entry.conversationId) ??
     readIdentifier(entry.threadId) ??
     `match-${index}`;
   const conversationId = readIdentifier(entry.conversationId) ?? recordId;
-  const participantId = deriveUserId(participant) ?? conversationId;
+  const participantId =
+    deriveUserId(participant) ??
+    readIdentifier(entry.participantId) ??
+    readIdentifier(entry.fromUserId) ??
+    readIdentifier(entry.senderId) ??
+    readIdentifier(entry.requesterId) ??
+    readIdentifier(entry.userId) ??
+    conversationId;
 
   const firstname =
     readString(participant?.firstname) ?? readString(participant?.firstName) ?? readString(entry.firstname) ?? readString(entry.firstName);
@@ -297,6 +321,51 @@ const normalizeMessagesPayload = (payload: unknown): ChatMessage[] => {
   if (isRecord(payload.data) && Array.isArray(payload.data.messages)) return payload.data.messages as ChatMessage[];
   if (Array.isArray(payload.data)) return payload.data as ChatMessage[];
   return [];
+};
+
+const buildMatchFromInviteEvent = (payload: unknown): Match | null => {
+  if (!isRecord(payload)) return null;
+
+  const invitationId =
+    readIdentifier(payload.invitationId) ??
+    readIdentifier(payload.id) ??
+    readIdentifier(payload.invitation_id);
+
+  if (!invitationId) return null;
+
+  const preview = isRecord(payload.preview) ? payload.preview : undefined;
+  const name =
+    readString(preview?.name) ??
+    readString(payload.previewName) ??
+    readString(payload.name) ??
+    "New invitation";
+
+  const location = readString(preview?.location) ?? readString(payload.location);
+  const age = readNumber(preview?.age ?? payload.age);
+  const tagParts = [
+    age ? `${age} yrs` : null,
+    location,
+  ].filter(Boolean);
+
+  const fromUserId =
+    readIdentifier(payload.fromUserId) ??
+    readIdentifier(payload.senderId) ??
+    readIdentifier(payload.userId) ??
+    invitationId;
+
+  return {
+    id: invitationId,
+    conversationId: invitationId,
+    name,
+    avatar: name.charAt(0).toUpperCase() || "P",
+    avatarColor: pickGradientForId(fromUserId),
+    lastMessage: "Sent you an invitation",
+    time: "Just now",
+    unread: 0,
+    online: false,
+    verified: false,
+    tag: tagParts.join(" • ") || "Invite",
+  };
 };
 
 const Avatar = ({
@@ -486,6 +555,7 @@ interface MiniChatProps {
 }
 
 const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatProps) => {
+  const { token: authToken } = useAuth();
   const [messageInput, setMessageInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -523,8 +593,14 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
 
     loadHistory();
 
-    if (!SOCKET_URL || !conversationId) {
-      console.warn("Socket URL missing or conversation unavailable.");
+    const storedToken =
+      authToken ??
+      (typeof window !== "undefined"
+        ? window.localStorage.getItem("pairup_token") ?? window.localStorage.getItem("authToken")
+        : null);
+
+    if (!SOCKET_URL || !conversationId || !storedToken) {
+      console.warn("Socket URL, token, or conversation unavailable.");
       return () => {
         isMounted = false;
       };
@@ -533,6 +609,7 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
     const socket = io(SOCKET_URL, {
       transports: ["websocket"],
       withCredentials: true,
+      auth: { token: storedToken },
     });
 
     socketRef.current = socket;
@@ -569,7 +646,7 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
       socketRef.current = null;
       setSocketReady(false);
     };
-  }, [conversationId, currentUserId]);
+  }, [authToken, conversationId, currentUserId]);
 
   const handleSend = () => {
     if (!currentUserId) {
@@ -696,7 +773,7 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
 };
 
 export default function MessagesPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const currentUserId = useMemo(() => deriveUserId(user), [user]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [newMatches, setNewMatches] = useState<Match[]>([]);
@@ -710,6 +787,7 @@ export default function MessagesPage() {
   const [filter, setFilter] = useState<"all" | "unread" | "online">("all");
   const [requestActionState, setRequestActionState] = useState<Record<string, "accept" | "decline" | null>>({});
   const [requestActionMessage, setRequestActionMessage] = useState<string | null>(null);
+  const realtimeSocketRef = useRef<Socket | null>(null);
 
   const loadMatches = useCallback(async () => {
     if (!currentUserId) {
@@ -729,7 +807,7 @@ export default function MessagesPage() {
       const [threads, incoming, pending] = await Promise.allSettled([
         apiClient.get(MATCHES_ENDPOINT),
         apiClient.get(NEW_MATCHES_ENDPOINT),
-        apiClient.get(LIKE_REQUESTS_ENDPOINT),
+        apiClient.get(INVITE_REQUESTS_ENDPOINT),
       ]);
 
       if (threads.status !== "fulfilled") {
@@ -766,6 +844,18 @@ export default function MessagesPage() {
     }
   }, [currentUserId]);
 
+  const upsertPendingRequest = useCallback((request: Match) => {
+    setPendingRequests((prev) => {
+      const index = prev.findIndex((item) => item.id === request.id);
+      if (index !== -1) {
+        const next = [...prev];
+        next[index] = { ...next[index], ...request };
+        return next;
+      }
+      return [request, ...prev];
+    });
+  }, []);
+
   useEffect(() => {
     if (!currentUserId) {
       setMatches([]);
@@ -777,6 +867,68 @@ export default function MessagesPage() {
     }
     void loadMatches();
   }, [currentUserId, loadMatches]);
+
+  useEffect(() => {
+    if (!currentUserId || !SOCKET_URL) {
+      return;
+    }
+
+    const storedToken =
+      token ??
+      (typeof window !== "undefined"
+        ? window.localStorage.getItem("pairup_token") ?? window.localStorage.getItem("authToken")
+        : null);
+
+    if (!storedToken) {
+      return;
+    }
+
+    const socket = io(SOCKET_URL, {
+      transports: ["websocket"],
+      withCredentials: true,
+      auth: { token: storedToken },
+    });
+
+    realtimeSocketRef.current = socket;
+
+    const handleInvite = (payload: unknown) => {
+      if (isRecord(payload)) {
+        const toId = readIdentifier(payload.toUserId ?? payload.recipientId);
+        if (toId && currentUserId && toId !== currentUserId) {
+          return;
+        }
+      }
+
+      const match = buildMatchFromInviteEvent(payload);
+      if (!match) return;
+      upsertPendingRequest(match);
+      setPendingError(null);
+    };
+
+    const handleRemoval = (payload: unknown) => {
+      if (!isRecord(payload)) return;
+      const invitationId = readIdentifier(payload.invitationId ?? payload.id);
+      if (!invitationId) return;
+      setPendingRequests((prev) => prev.filter((item) => item.id !== invitationId));
+    };
+
+    socket.on("invite:created", handleInvite);
+    socket.on("matchRequest", handleInvite);
+    socket.on("invite:accepted", (payload) => {
+      handleRemoval(payload);
+      void loadMatches();
+    });
+    socket.on("invite:rejected", handleRemoval);
+
+    return () => {
+      socket.off("invite:created", handleInvite);
+      socket.off("matchRequest", handleInvite);
+      socket.off("invite:accepted");
+      socket.off("invite:rejected", handleRemoval);
+      socket.disconnect();
+      realtimeSocketRef.current = null;
+    };
+  }, [currentUserId, loadMatches, token, upsertPendingRequest]);
 
   const handleSelect = useCallback(
     (match: Match) => {
@@ -835,7 +987,7 @@ export default function MessagesPage() {
       setRequestActionMessage(null);
 
       try {
-        await apiClient.post(`${LIKE_RESPOND_ENDPOINT}/${request.id}/${action}`, {
+        await apiClient.post(`${INVITE_RESPOND_ENDPOINT}/${request.id}/${action}`, {
           matchId: request.id,
           conversationId: request.conversationId,
           userId: currentUserId,

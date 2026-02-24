@@ -23,14 +23,18 @@ type DiscoverUser = {
     thumbnail: string;
 };
 
-type SwipeAction = "like" | "dislike";
 type SwipeDirection = "left" | "right";
 
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?w=800&auto=format&fit=crop";
+const USERS_ENDPOINT = process.env.NEXT_PUBLIC_USERS_ENDPOINT ?? process.env.NEXT_PUBLIC_ADMIN_USERS_ENDPOINT ?? "/api/admin/users";
 
-const directionToAction: Record<SwipeDirection, SwipeAction> = {
-    left: "dislike",
-    right: "like",
+const shuffle = <T,>(source: T[]): T[] => {
+    const copy = [...source];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
 };
 
 const isRecord = (value: unknown): value is LooseRecord => typeof value === "object" && value !== null;
@@ -110,6 +114,13 @@ const pickCollection = (payload: unknown, depth = 0): unknown[] => {
         "payload",
     ];
 
+    // Handle common { data: { users: [...] } } shape explicitly
+    if (isRecord(payload.data)) {
+        const nested = payload.data as LooseRecord;
+        if (Array.isArray(nested.users)) return nested.users;
+        if (Array.isArray(nested.data)) return nested.data;
+    }
+
     for (const key of candidateKeys) {
         const value = payload[key];
         if (Array.isArray(value)) return value;
@@ -118,7 +129,6 @@ const pickCollection = (payload: unknown, depth = 0): unknown[] => {
             if (nested.length) return nested;
         }
     }
-
 
     // Generic fallback: search any nested object values for arrays.
     for (const value of Object.values(payload)) {
@@ -169,8 +179,25 @@ const extractUsers = (payload: unknown): DiscoverUser[] => {
 };
 
 const fetchDiscoverUsers = async (): Promise<DiscoverUser[]> => {
-    const response = await apiClient.get("/api/users/discover");
-    return extractUsers(response.data);
+    try {
+        const response = await apiClient.get(USERS_ENDPOINT);
+        return extractUsers(response.data);
+    } catch (primaryError) {
+        console.warn("Primary users endpoint failed, trying fallback /api/admin/users", primaryError);
+        try {
+            const fallback = await apiClient.get("/api/admin/users");
+            return extractUsers(fallback.data);
+        } catch (fallbackError) {
+            console.error("Fallback admin users endpoint failed", fallbackError);
+            try {
+                const lastResort = await apiClient.get("/admin/users");
+                return extractUsers(lastResort.data);
+            } catch (lastResortError) {
+                console.error("All user endpoints failed", lastResortError);
+                throw primaryError;
+            }
+        }
+    }
 };
 
 type LoadOptions = {
@@ -184,10 +211,34 @@ export default function DiscoverPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [swipeError, setSwipeError] = useState<string | null>(null);
+    const [inviteNotice, setInviteNotice] = useState<string | null>(null);
+    const inviteNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [reloadPending, setReloadPending] = useState(false);
     const swipeQueueRef = useRef<Set<string>>(new Set());
     const autoReloadingRef = useRef(false);
     const initialDeckRef = useRef<DiscoverUser[]>([]);
+
+    const clearInviteNotice = useCallback(() => {
+        if (inviteNoticeTimerRef.current) {
+            clearTimeout(inviteNoticeTimerRef.current);
+            inviteNoticeTimerRef.current = null;
+        }
+        setInviteNotice(null);
+    }, []);
+
+    const setInviteNoticeWithTimeout = useCallback(
+        (message: string) => {
+            setInviteNotice(message);
+            if (inviteNoticeTimerRef.current) {
+                clearTimeout(inviteNoticeTimerRef.current);
+            }
+            inviteNoticeTimerRef.current = setTimeout(() => {
+                setInviteNotice(null);
+                inviteNoticeTimerRef.current = null;
+            }, 4000);
+        },
+        []
+    );
 
     const loadUsers = useCallback(async (options?: LoadOptions) => {
         const fallbackToCached = options?.fallbackToCached ?? false;
@@ -198,11 +249,13 @@ export default function DiscoverPage() {
         }
         setError(null);
         setSwipeError(null);
+        clearInviteNotice();
         try {
             const data = await fetchDiscoverUsers();
             if (data.length > 0) {
-                setUsers(data);
-                initialDeckRef.current = data;
+                const randomized = shuffle(data);
+                setUsers(randomized);
+                initialDeckRef.current = randomized;
             } else if (fallbackToCached && initialDeckRef.current.length) {
                 setUsers([...initialDeckRef.current]);
             } else {
@@ -226,6 +279,7 @@ export default function DiscoverPage() {
     const resetDeck = useCallback(() => {
         setError(null);
         setSwipeError(null);
+        clearInviteNotice();
         setReloadPending(true);
 
         loadUsers({ fallbackToCached: true, showSpinner: false })
@@ -241,58 +295,47 @@ export default function DiscoverPage() {
         void loadUsers();
     }, [loadUsers]);
 
-    const handleSwipe = useCallback(async (direction: SwipeDirection, user: DiscoverUser) => {
-        const action = directionToAction[direction];
-        if (!action) return;
+    const handleSwipe = useCallback(
+        async (direction: SwipeDirection, user: DiscoverUser) => {
+            if (direction !== "left" && direction !== "right") return;
 
-        if (swipeQueueRef.current.has(user.id)) {
-            return;
-        }
+            if (swipeQueueRef.current.has(user.id)) {
+                return;
+            }
 
-        swipeQueueRef.current.add(user.id);
-        setSwipeError(null);
-        let deckEmptyAfterSwipe = false;
-        setUsers((prev) => {
-            const next = prev.filter((candidate) => candidate.id !== user.id);
-            deckEmptyAfterSwipe = next.length === 0;
-            return next;
-        });
-        let restored = false;
-
-        try {
-            await apiClient.post("/api/swipes", {
-                swipedUserId: user.id,
-                action,
+            swipeQueueRef.current.add(user.id);
+            setSwipeError(null);
+            clearInviteNotice();
+            let deckEmptyAfterSwipe = false;
+            setUsers((prev) => {
+                const next = prev.filter((candidate) => candidate.id !== user.id);
+                deckEmptyAfterSwipe = next.length === 0;
+                return next;
             });
-        } catch (err) {
-            const axiosError = err as AxiosError<{ message?: string }>;
-            const status = axiosError.response?.status;
-            const message = axiosError.response?.data?.message;
+            let restored = false;
 
-            if (status !== 409) {
+            try {
+                // Right swipe now just removes the card locally; chat flow handles messaging.
+            } catch (err) {
+                setSwipeError("Unable to process swipe. Please try again.");
                 setUsers((prev) => [user, ...prev]);
                 restored = true;
                 console.error("Swipe submission failed", err);
-            }
-
-            setSwipeError(
-                status === 409
-                    ? "You already swiped on this profile."
-                    : message ?? "Unable to record swipe. Please try again."
-            );
-        } finally {
-            swipeQueueRef.current.delete(user.id);
-        }
-
-        if (deckEmptyAfterSwipe && !restored && !autoReloadingRef.current) {
-            autoReloadingRef.current = true;
-            try {
-                await loadUsers({ fallbackToCached: true, showSpinner: false });
             } finally {
-                autoReloadingRef.current = false;
+                swipeQueueRef.current.delete(user.id);
             }
-        }
-    }, [loadUsers]);
+
+            if (deckEmptyAfterSwipe && !restored && !autoReloadingRef.current) {
+                autoReloadingRef.current = true;
+                try {
+                    await loadUsers({ fallbackToCached: true, showSpinner: false });
+                } finally {
+                    autoReloadingRef.current = false;
+                }
+            }
+        },
+        [loadUsers]
+    );
 
     const handleSwipeWrapper = useCallback(
         (direction: string, user: DiscoverUser) => {
@@ -302,6 +345,14 @@ export default function DiscoverPage() {
         },
         [handleSwipe]
     );
+
+    useEffect(() => {
+        return () => {
+            if (inviteNoticeTimerRef.current) {
+                clearTimeout(inviteNoticeTimerRef.current);
+            }
+        };
+    }, []);
 
     const stackedUsers = useMemo(() => users.slice(0, 4), [users]);
 
@@ -382,7 +433,7 @@ export default function DiscoverPage() {
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
 
                                 <div className="absolute left-6 top-6 flex items-center gap-2 rounded-full bg-white/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.25em] backdrop-blur">
-                                    <Sparkles className="h-3.5 w-3.5" /> Fresh match
+                                    <Sparkles className="h-3.5 w-3.5" /> Browse members
                                 </div>
 
                                 <div className="absolute inset-x-6 bottom-6 space-y-2">
@@ -396,7 +447,7 @@ export default function DiscoverPage() {
                                             Swipe left ↺
                                         </span>
                                         <span className="rounded-full bg-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80">
-                                            Swipe right ❤
+                                            Swipe right → Next
                                         </span>
                                     </div>
                                 </div>
@@ -407,6 +458,9 @@ export default function DiscoverPage() {
                 </div>
                 {swipeError ? (
                     <p className="text-sm text-rose-500 text-center max-w-md">{swipeError}</p>
+                ) : null}
+                {!swipeError && inviteNotice ? (
+                    <p className="text-sm text-emerald-600 text-center max-w-md">{inviteNotice}</p>
                 ) : null}
             </div>
         );
@@ -422,7 +476,7 @@ export default function DiscoverPage() {
                         </p>
                         <h1 className="mt-4 text-4xl font-semibold text-slate-900">Swipe your next connection</h1>
                         <p className="mt-3 text-sm text-slate-500">
-                            Swipe right for a like, left to pass. The deck refreshes automatically as you meet new people.
+                            Swipe right to send an invitation, left to skip. The deck refreshes automatically as you meet new people.
                         </p>
                     </header>
 

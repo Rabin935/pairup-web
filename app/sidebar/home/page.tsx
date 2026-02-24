@@ -262,7 +262,7 @@ export default function HomePage() {
               </div>
 
               <p className="text-gray-400 text-xs mt-6 animate-fadeUp" style={{ animationDelay: "0.65s" }}>
-                No credit card needed · Join 50,000+ members
+                No credit card needed · Join 20+ members
               </p>
             </div>
 
