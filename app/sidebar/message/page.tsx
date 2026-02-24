@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { io, type Socket } from "socket.io-client";
 
 import { useAuth } from "@/context/AuthContext";
+import { getAuthData } from "@/lib/auth-utils";
 import apiClient from "@/lib/api";
 
 type LooseRecord = Record<string, unknown>;
@@ -11,8 +12,12 @@ type LooseRecord = Record<string, unknown>;
 interface Match {
   id: string;
   conversationId?: string;
+  participantId?: string;
+  senderId?: string;
+  requestType?: "like" | "invite";
   name: string;
   avatar: string;
+  profileImage?: string;
   avatarColor: string;
   lastMessage?: string;
   time?: string;
@@ -32,10 +37,18 @@ interface ChatMessage {
   status?: "pending" | "sent";
 }
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? "";
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://localhost:5000";
 const MATCHES_ENDPOINT = process.env.NEXT_PUBLIC_MATCHES_ENDPOINT ?? "/api/conversations";
-const NEW_MATCHES_ENDPOINT = process.env.NEXT_PUBLIC_NEW_MATCHES_ENDPOINT ?? "/api/matches/new";
+const CONVERSATION_START_ENDPOINT =
+  process.env.NEXT_PUBLIC_CONVERSATION_START_ENDPOINT ?? "/api/conversations";
+const NEW_MATCHES_ENDPOINT = process.env.NEXT_PUBLIC_NEW_MATCHES_ENDPOINT ?? "/api/matches";
+const LIKE_REQUESTS_ENDPOINT = process.env.NEXT_PUBLIC_LIKE_REQUESTS_ENDPOINT ?? "/api/likes/pending";
 const INVITE_REQUESTS_ENDPOINT = process.env.NEXT_PUBLIC_INVITE_REQUESTS_ENDPOINT ?? "/api/invites/pending";
+const LIKE_RESPOND_ENDPOINT = process.env.NEXT_PUBLIC_LIKE_RESPOND_ENDPOINT ?? "/api/likes";
 const INVITE_RESPOND_ENDPOINT = process.env.NEXT_PUBLIC_INVITE_RESPOND_ENDPOINT ?? "/api/invites";
 
 const gradientPalette = [
@@ -79,18 +92,66 @@ const readBoolean = (value: unknown): boolean | undefined => {
 const readIdentifier = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.trim().length) return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return value.toString();
+  if (value && typeof value === "object" && typeof (value as { toString?: () => string }).toString === "function") {
+    const rendered = (value as { toString: () => string }).toString().trim();
+    if (rendered && rendered !== "[object Object]") return rendered;
+  }
   return undefined;
 };
 
-const deriveUserId = (value: unknown): string | null => {
+const isObjectIdLike = (value: string | undefined | null): value is string =>
+  Boolean(value && /^[a-f0-9]{24}$/i.test(value));
+
+const deriveMongoUserId = (value: unknown): string | null => {
   if (!isRecord(value)) return null;
-  return (
-    readIdentifier(value.id) ??
-    readIdentifier(value.userId) ??
-    readIdentifier(value._id) ??
-    readIdentifier(value.uid) ??
-    null
-  );
+  const candidates = [
+    readIdentifier(value._id),
+    readIdentifier(value.mongoId),
+    readIdentifier(value.id),
+    readIdentifier(value.userId),
+  ];
+
+  return candidates.find((item): item is string => isObjectIdLike(item)) ?? null;
+};
+
+const decodeMongoUserIdFromToken = (token: string | null | undefined): string | null => {
+  if (!token || typeof window === "undefined" || typeof window.atob !== "function") return null;
+
+  try {
+    const payloadSegment = token.split(".")[1];
+    if (!payloadSegment) return null;
+
+    const normalized = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+    const payload = JSON.parse(window.atob(padded)) as LooseRecord;
+    const decodedId =
+      readIdentifier(payload.id) ??
+      readIdentifier(payload._id) ??
+      readIdentifier(payload.userId);
+
+    return isObjectIdLike(decodedId) ? decodedId : null;
+  } catch {
+    return null;
+  }
+};
+
+const deriveUserId = (value: unknown): string | null => {
+  const mongoId = deriveMongoUserId(value);
+  if (mongoId) return mongoId;
+
+  if (!isRecord(value)) return null;
+  const candidates = [
+    readIdentifier(value.id),
+    readIdentifier(value.userId),
+    readIdentifier(value.uid),
+  ];
+
+  return candidates.find((item): item is string => Boolean(item)) ?? null;
+};
+
+const getStoredAccessToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("pairup_token") ?? window.localStorage.getItem("authToken");
 };
 
 const hashString = (value: string) => {
@@ -216,16 +277,23 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
   if (!isRecord(entry)) return null;
 
   const participant = resolveParticipant(entry, currentUserId);
+  const hasParticipants = Array.isArray(entry.participants);
+  const explicitConversationId =
+    readIdentifier(entry.conversationId) ??
+    readIdentifier(entry.threadId) ??
+    (hasParticipants ? readIdentifier(entry.id) : undefined);
+
   const recordId =
     readIdentifier(entry.id) ??
     readIdentifier(entry.matchId) ??
     readIdentifier(entry.invitationId) ??
-    readIdentifier(entry.conversationId) ??
-    readIdentifier(entry.threadId) ??
+    explicitConversationId ??
+    readIdentifier(entry._id) ??
     `match-${index}`;
-  const conversationId = readIdentifier(entry.conversationId) ?? recordId;
+  const conversationId = explicitConversationId;
   const participantId =
     deriveUserId(participant) ??
+    readIdentifier(entry._id) ??
     readIdentifier(entry.participantId) ??
     readIdentifier(entry.fromUserId) ??
     readIdentifier(entry.senderId) ??
@@ -237,9 +305,24 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
     readString(participant?.firstname) ?? readString(participant?.firstName) ?? readString(entry.firstname) ?? readString(entry.firstName);
   const lastname =
     readString(participant?.lastname) ?? readString(participant?.lastName) ?? readString(entry.lastname) ?? readString(entry.lastName);
-  const fallbackName = readString(participant?.name) ?? readString(entry.name) ?? `Match ${index + 1}`;
+  const fallbackName =
+    readString(participant?.name) ??
+    readString(participant?.displayName) ??
+    readString(entry.name) ??
+    `Match ${index + 1}`;
   const name = [firstname, lastname].filter(Boolean).join(" ").trim() || fallbackName;
   const avatar = name.charAt(0).toUpperCase() || "P";
+  const participantImages = Array.isArray(participant?.images)
+    ? participant.images.filter((img): img is LooseRecord => isRecord(img))
+    : [];
+  const profileImage =
+    readString(participant?.profileImage) ??
+    readString(participant?.avatar) ??
+    readString(participant?.image) ??
+    readString(participantImages.find((img) => readBoolean(img.isThumbnail))?.url) ??
+    readString(participantImages[0]?.url) ??
+    readString(entry.profileImage) ??
+    readString(entry.avatar);
   const avatarColor = pickGradientForId(participantId);
 
   const lastMessage =
@@ -263,15 +346,24 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
     readNumber(entry.unreadMessages) ??
     0;
 
-  const online = readBoolean(participant?.online) ?? readBoolean(entry.online) ?? false;
+  const participantStatus = readString(participant?.status)?.toLowerCase();
+  const online =
+    readBoolean(participant?.online) ??
+    readBoolean(participant?.isOnline) ??
+    (participantStatus === "online" ? true : participantStatus === "offline" ? false : undefined) ??
+    readBoolean(entry.online) ??
+    readBoolean(entry.isOnline) ??
+    false;
   const verified = readBoolean(participant?.verified) ?? readBoolean(entry.verified) ?? false;
   const tag = extractTag(participant) ?? "✨ Match";
 
   return {
     id: recordId,
     conversationId,
+    participantId,
     name,
     avatar,
+    profileImage,
     avatarColor,
     lastMessage,
     time: formatRelativeTime(timestamp),
@@ -314,6 +406,53 @@ const normalizeMatchesPayload = (payload: unknown, currentUserId?: string | null
   };
 };
 
+const normalizePendingLikesPayload = (payload: unknown): Match[] => {
+  if (!isRecord(payload)) return [];
+
+  const nested = isRecord(payload.data) ? (payload.data as LooseRecord) : undefined;
+  const likes = Array.isArray(payload.likes)
+    ? payload.likes
+    : Array.isArray(nested?.likes)
+      ? nested.likes
+      : [];
+
+  return likes
+    .map((entry, index): Match | null => {
+      if (!isRecord(entry)) return null;
+
+      const senderId = readIdentifier(entry.senderId);
+      const likeId = readIdentifier(entry.likeId) ?? senderId ?? `like-${index}`;
+      const name = readString(entry.name) ?? "PairUp user";
+      const profileImage = readString(entry.image) ?? readString(entry.profileImage);
+      const createdAt = readString(entry.createdAt);
+
+      const match: Match = {
+        id: likeId,
+        senderId,
+        participantId: senderId,
+        requestType: "like" as const,
+        name,
+        avatar: name.charAt(0).toUpperCase() || "P",
+        profileImage,
+        avatarColor: pickGradientForId(senderId ?? likeId),
+        lastMessage: "Liked your profile",
+        time: formatRelativeTime(createdAt),
+        unread: 0,
+        online: false,
+        verified: false,
+        tag: "Like",
+      };
+      return match;
+    })
+    .filter((item): item is Match => item !== null);
+};
+
+const normalizePendingInvitesPayload = (payload: unknown, currentUserId?: string | null): Match[] =>
+  extractMatchList(payload, currentUserId).map((invite) => ({
+    ...invite,
+    requestType: "invite" as const,
+  }));
+
 const normalizeMessagesPayload = (payload: unknown): ChatMessage[] => {
   if (Array.isArray(payload)) return payload as ChatMessage[];
   if (!isRecord(payload)) return [];
@@ -321,6 +460,34 @@ const normalizeMessagesPayload = (payload: unknown): ChatMessage[] => {
   if (isRecord(payload.data) && Array.isArray(payload.data.messages)) return payload.data.messages as ChatMessage[];
   if (Array.isArray(payload.data)) return payload.data as ChatMessage[];
   return [];
+};
+
+const normalizeSocketMessagePayload = (payload: unknown): ChatMessage | null => {
+  if (!isRecord(payload)) return null;
+
+  const id =
+    readIdentifier(payload.id) ??
+    readIdentifier(payload._id) ??
+    readIdentifier(payload.clientMessageId);
+  const conversationId = readIdentifier(payload.conversationId);
+  const senderId = readIdentifier(payload.senderId) ?? readIdentifier(payload.sender);
+  const body = readString(payload.body) ?? readString(payload.text);
+  const createdAt = readString(payload.createdAt) ?? new Date().toISOString();
+  const clientMessageId = readIdentifier(payload.clientMessageId);
+
+  if (!id || !conversationId || !senderId || !body) {
+    return null;
+  }
+
+  return {
+    id,
+    conversationId,
+    senderId,
+    body,
+    createdAt,
+    clientMessageId,
+    status: "sent",
+  };
 };
 
 const buildMatchFromInviteEvent = (payload: unknown): Match | null => {
@@ -339,6 +506,11 @@ const buildMatchFromInviteEvent = (payload: unknown): Match | null => {
     readString(payload.previewName) ??
     readString(payload.name) ??
     "New invitation";
+  const profileImage =
+    readString(preview?.avatar) ??
+    readString(preview?.profileImage) ??
+    readString(payload.avatar) ??
+    readString(payload.profileImage);
 
   const location = readString(preview?.location) ?? readString(payload.location);
   const age = readNumber(preview?.age ?? payload.age);
@@ -356,8 +528,12 @@ const buildMatchFromInviteEvent = (payload: unknown): Match | null => {
   return {
     id: invitationId,
     conversationId: invitationId,
+    participantId: fromUserId,
+    senderId: fromUserId,
+    requestType: "invite",
     name,
     avatar: name.charAt(0).toUpperCase() || "P",
+    profileImage,
     avatarColor: pickGradientForId(fromUserId),
     lastMessage: "Sent you an invitation",
     time: "Just now",
@@ -374,12 +550,16 @@ const Avatar = ({
   online,
   size = "md",
   verified = false,
+  imageUrl,
+  alt,
 }: {
   letter: string;
   color: string;
   online?: boolean;
   size?: "sm" | "md" | "lg" | "xl";
   verified?: boolean;
+  imageUrl?: string;
+  alt?: string;
 }) => {
   const sizes = {
     sm: "w-10 h-10 text-sm",
@@ -403,7 +583,15 @@ const Avatar = ({
   return (
     <div className="relative flex-shrink-0">
       <div className={`${sizes[size]} rounded-full bg-gradient-to-br ${color} flex items-center justify-center font-bold text-white shadow-lg`}>
-        {letter}
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={alt ?? "Profile"}
+            className="w-full h-full rounded-full object-cover"
+          />
+        ) : (
+          letter
+        )}
       </div>
       {online !== undefined && (
         <span className={`absolute ${dotSizes[size]} rounded-full ${online ? "bg-emerald-400" : "bg-gray-300"} border-white`} />
@@ -435,9 +623,17 @@ const NewMatchBubble = ({ match, onClick, disabled }: { match: Match; onClick: (
     <div className="relative">
       <div className="w-[68px] h-[68px] rounded-full bg-gradient-to-br from-violet-400 via-purple-500 to-indigo-600 p-[2.5px] shadow-md shadow-violet-200/60 group-hover:shadow-violet-300/80 group-hover:scale-105 transition-all duration-200">
         <div className="w-full h-full rounded-full bg-white p-[2px]">
-          <div className={`w-full h-full rounded-full bg-gradient-to-br ${match.avatarColor} flex items-center justify-center text-white font-bold text-lg`}>
-            {match.avatar}
-          </div>
+          {match.profileImage ? (
+            <img
+              src={match.profileImage}
+              alt={match.name}
+              className="w-full h-full rounded-full object-cover"
+            />
+          ) : (
+            <div className={`w-full h-full rounded-full bg-gradient-to-br ${match.avatarColor} flex items-center justify-center text-white font-bold text-lg`}>
+              {match.avatar}
+            </div>
+          )}
         </div>
       </div>
       {match.online && (
@@ -461,7 +657,15 @@ const MessageCard = ({ match, active, onClick, index }: { match: Match; active: 
       }`}
       style={{ animationDelay: `${index * 0.05}s` }}
     >
-      <Avatar letter={match.avatar} color={match.avatarColor} online={match.online} size="md" verified={match.verified} />
+      <Avatar
+        letter={match.avatar}
+        color={match.avatarColor}
+        online={match.online}
+        size="md"
+        verified={match.verified}
+        imageUrl={match.profileImage}
+        alt={match.name}
+      />
 
       <div className="flex-1 min-w-0 text-left">
         <div className="flex items-center justify-between mb-1">
@@ -497,7 +701,15 @@ const PendingRequestCard = ({
   busy?: "accept" | "decline" | null;
 }) => (
   <div className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl border border-violet-100 bg-gradient-to-br from-white to-violet-50/60">
-    <Avatar letter={request.avatar} color={request.avatarColor} online={request.online} size="sm" verified={request.verified} />
+    <Avatar
+      letter={request.avatar}
+      color={request.avatarColor}
+      online={request.online}
+      size="sm"
+      verified={request.verified}
+      imageUrl={request.profileImage}
+      alt={request.name}
+    />
     <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between">
         <p className="font-semibold text-sm text-gray-900 truncate">{request.name}</p>
@@ -593,11 +805,7 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
 
     loadHistory();
 
-    const storedToken =
-      authToken ??
-      (typeof window !== "undefined"
-        ? window.localStorage.getItem("pairup_token") ?? window.localStorage.getItem("authToken")
-        : null);
+    const storedToken = authToken ?? getStoredAccessToken();
 
     if (!SOCKET_URL || !conversationId || !storedToken) {
       console.warn("Socket URL, token, or conversation unavailable.");
@@ -616,32 +824,44 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
 
     socket.on("connect", () => {
       setSocketReady(true);
+      console.log("[socket:chat] connected", {
+        socketId: socket.id,
+        conversationId,
+        currentUserId,
+      });
       socket.emit("joinConversation", { conversationId, userId: currentUserId });
     });
 
-    socket.on("receiveMessage", (incoming: ChatMessage) => {
-      if (incoming.conversationId !== conversationId) return;
+    socket.on("receiveMessage", (incoming: unknown) => {
+      const normalizedIncoming = normalizeSocketMessagePayload(incoming);
+      if (!normalizedIncoming || normalizedIncoming.conversationId !== conversationId) return;
       setMessages((prev) => {
-        if (incoming.clientMessageId) {
-          const idx = prev.findIndex((item) => item.clientMessageId === incoming.clientMessageId);
+        if (normalizedIncoming.clientMessageId) {
+          const idx = prev.findIndex(
+            (item) => item.clientMessageId === normalizedIncoming.clientMessageId
+          );
           if (idx !== -1) {
             const updated = [...prev];
-            updated[idx] = { ...incoming, status: "sent" };
+            updated[idx] = normalizedIncoming;
             return updated;
           }
         }
-        return [...prev, { ...incoming, status: "sent" }];
+        return [...prev, normalizedIncoming];
       });
     });
 
     socket.on("disconnect", () => {
       setSocketReady(false);
     });
+    socket.on("connect_error", (err) => {
+      console.error("[socket:chat] connect_error", err.message);
+    });
 
     return () => {
       isMounted = false;
       socket.emit("leaveConversation", { conversationId, userId: currentUserId });
       socket.off("receiveMessage");
+      socket.off("connect_error");
       socket.disconnect();
       socketRef.current = null;
       setSocketReady(false);
@@ -651,6 +871,10 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
   const handleSend = () => {
     if (!currentUserId) {
       setError("Log in to send messages.");
+      return;
+    }
+    if (!match.participantId) {
+      setError("Unable to identify the receiver for this conversation.");
       return;
     }
     const trimmed = messageInput.trim();
@@ -671,12 +895,38 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
     setMessages((prev) => [...prev, outgoing]);
     setMessageInput("");
 
-    socketRef.current.emit("sendMessage", {
-      conversationId,
-      senderId: currentUserId,
-      body: trimmed,
-      clientMessageId,
-    });
+    socketRef.current.emit(
+      "sendMessage",
+      {
+        senderId: currentUserId,
+        receiverId: match.participantId,
+        text: trimmed,
+        clientMessageId,
+      },
+      (response: unknown) => {
+        console.log("[socket:chat] sendMessage ack", response);
+        if (!isRecord(response)) return;
+
+        if (response.success) {
+          const normalized = normalizeSocketMessagePayload(response.message);
+          if (!normalized) return;
+
+          setMessages((prev) => {
+            const idx = prev.findIndex((item) => item.clientMessageId === clientMessageId);
+            if (idx === -1) return prev;
+            const updated = [...prev];
+            updated[idx] = normalized;
+            return updated;
+          });
+          return;
+        }
+
+        const failureMessage =
+          readString(response.message) ?? "Unable to send message. Please try again.";
+        setError(failureMessage);
+        setMessages((prev) => prev.filter((item) => item.clientMessageId !== clientMessageId));
+      }
+    );
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -689,7 +939,15 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex items-center gap-3 px-6 py-4 border-b border-violet-100 bg-white">
-        <Avatar letter={match.avatar} color={match.avatarColor} online={match.online} size="sm" verified={match.verified} />
+        <Avatar
+          letter={match.avatar}
+          color={match.avatarColor}
+          online={match.online}
+          size="sm"
+          verified={match.verified}
+          imageUrl={match.profileImage}
+          alt={match.name}
+        />
         <div className="flex-1">
           <p className="font-semibold text-gray-900 text-sm">{match.name}</p>
           <p className={`text-xs ${match.online ? "text-emerald-500" : "text-gray-400"}`}>{match.online ? "● Online now" : "● Last seen recently"}</p>
@@ -774,7 +1032,29 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
 
 export default function MessagesPage() {
   const { user, token } = useAuth();
-  const currentUserId = useMemo(() => deriveUserId(user), [user]);
+  const currentUserId = useMemo(() => {
+    const fromContext = deriveMongoUserId(user);
+    if (fromContext) return fromContext;
+
+    const storedAuth = getAuthData();
+    const fromStoredAuth = deriveMongoUserId(storedAuth?.userInfo ?? null);
+    if (fromStoredAuth) return fromStoredAuth;
+
+    if (typeof window !== "undefined") {
+      const pairupUser = window.localStorage.getItem("pairup_user");
+      if (pairupUser) {
+        try {
+          const parsed = JSON.parse(pairupUser) as LooseRecord;
+          const fromPairupUser = deriveMongoUserId(parsed);
+          if (fromPairupUser) return fromPairupUser;
+        } catch {
+          // Ignore malformed local user cache and continue to token fallback.
+        }
+      }
+    }
+
+    return decodeMongoUserIdFromToken(token ?? getStoredAccessToken());
+  }, [token, user]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [newMatches, setNewMatches] = useState<Match[]>([]);
   const [pendingRequests, setPendingRequests] = useState<Match[]>([]);
@@ -788,6 +1068,16 @@ export default function MessagesPage() {
   const [requestActionState, setRequestActionState] = useState<Record<string, "accept" | "decline" | null>>({});
   const [requestActionMessage, setRequestActionMessage] = useState<string | null>(null);
   const realtimeSocketRef = useRef<Socket | null>(null);
+
+  const fetchMatchedUsers = useCallback(async (): Promise<Match[]> => {
+    const accessToken = token ?? getStoredAccessToken();
+
+    const response = await apiClient.get(NEW_MATCHES_ENDPOINT, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    });
+    console.log("[matches] /api/matches response:", response.data);
+    return extractMatchList(response.data, currentUserId);
+  }, [currentUserId, token]);
 
   const loadMatches = useCallback(async () => {
     if (!currentUserId) {
@@ -804,32 +1094,62 @@ export default function MessagesPage() {
     setPendingError(null);
 
     try {
-      const [threads, incoming, pending] = await Promise.allSettled([
+      const [threads, pendingLikes, pendingInvites, fetchedMatches] = await Promise.allSettled([
         apiClient.get(MATCHES_ENDPOINT),
-        apiClient.get(NEW_MATCHES_ENDPOINT),
+        apiClient.get(LIKE_REQUESTS_ENDPOINT),
         apiClient.get(INVITE_REQUESTS_ENDPOINT),
+        fetchMatchedUsers(),
       ]);
 
       if (threads.status !== "fulfilled") {
         throw threads.reason ?? new Error("Unable to load conversations");
       }
 
+      console.log("[matches] /api/conversations response:", threads.value.data);
+
       const normalized = normalizeMatchesPayload(threads.value.data, currentUserId);
-      setMatches(normalized.matches);
 
       let computedNewMatches = normalized.newMatches;
-      if (incoming.status === "fulfilled") {
-        computedNewMatches = extractMatchList(incoming.value.data, currentUserId);
-      } else if (incoming.status === "rejected") {
-        console.warn("Unable to load new matches", incoming.reason);
+      if (fetchedMatches.status === "fulfilled") {
+        computedNewMatches = fetchedMatches.value;
+      } else {
+        console.warn("Unable to load /api/matches", fetchedMatches.reason);
+        computedNewMatches = normalized.matches;
       }
       setNewMatches(computedNewMatches);
 
-      if (pending.status === "fulfilled") {
-        setPendingRequests(extractMatchList(pending.value.data, currentUserId));
-      } else if (pending.status === "rejected") {
-        console.warn("Unable to load pending requests", pending.reason);
-        setPendingRequests([]);
+      const mergedMatchesMap = new Map<string, Match>();
+      const mergedMatches = [...normalized.matches, ...computedNewMatches];
+      mergedMatches.forEach((match) => {
+        const key = match.participantId ?? match.id;
+        const existing = mergedMatchesMap.get(key);
+        if (!existing) {
+          mergedMatchesMap.set(key, match);
+          return;
+        }
+
+        mergedMatchesMap.set(key, {
+          ...existing,
+          ...match,
+          conversationId: existing.conversationId ?? match.conversationId,
+        });
+      });
+      setMatches(Array.from(mergedMatchesMap.values()));
+
+      const fromLikes =
+        pendingLikes.status === "fulfilled"
+          ? normalizePendingLikesPayload(pendingLikes.value.data)
+          : [];
+      const fromInvites =
+        pendingInvites.status === "fulfilled"
+          ? normalizePendingInvitesPayload(pendingInvites.value.data, currentUserId)
+          : [];
+
+      const mergedPending = [...fromLikes, ...fromInvites];
+      setPendingRequests(mergedPending);
+
+      if (pendingLikes.status === "rejected" && pendingInvites.status === "rejected") {
+        console.warn("Unable to load pending likes and invites", pendingLikes.reason, pendingInvites.reason);
         setPendingError("Unable to load likes waiting for your response.");
       }
     } catch (error) {
@@ -842,7 +1162,7 @@ export default function MessagesPage() {
     } finally {
       setMatchesLoading(false);
     }
-  }, [currentUserId]);
+  }, [currentUserId, fetchMatchedUsers]);
 
   const upsertPendingRequest = useCallback((request: Match) => {
     setPendingRequests((prev) => {
@@ -865,6 +1185,8 @@ export default function MessagesPage() {
       setMatchesLoading(false);
       return;
     }
+
+    console.log("[messages] resolved currentUserId:", currentUserId);
     void loadMatches();
   }, [currentUserId, loadMatches]);
 
@@ -873,11 +1195,7 @@ export default function MessagesPage() {
       return;
     }
 
-    const storedToken =
-      token ??
-      (typeof window !== "undefined"
-        ? window.localStorage.getItem("pairup_token") ?? window.localStorage.getItem("authToken")
-        : null);
+    const storedToken = token ?? getStoredAccessToken();
 
     if (!storedToken) {
       return;
@@ -892,6 +1210,7 @@ export default function MessagesPage() {
     realtimeSocketRef.current = socket;
 
     const handleInvite = (payload: unknown) => {
+      console.log("[socket] invite payload", payload);
       if (isRecord(payload)) {
         const toId = readIdentifier(payload.toUserId ?? payload.recipientId);
         if (toId && currentUserId && toId !== currentUserId) {
@@ -912,37 +1231,112 @@ export default function MessagesPage() {
       setPendingRequests((prev) => prev.filter((item) => item.id !== invitationId));
     };
 
-    socket.on("invite:created", handleInvite);
-    socket.on("matchRequest", handleInvite);
-    socket.on("invite:accepted", (payload) => {
+    const handleMatchCreated = (payload: unknown) => {
+      console.log("[socket] match created payload", payload);
       handleRemoval(payload);
       void loadMatches();
+    };
+
+    socket.on("connect", () => {
+      console.log("[socket] connected", {
+        socketId: socket.id,
+        currentUserId,
+        socketUrl: SOCKET_URL,
+      });
     });
+    socket.on("disconnect", (reason) => {
+      console.log("[socket] disconnected", { reason, currentUserId });
+    });
+    socket.on("connect_error", (error) => {
+      console.error("[socket] connect_error", error.message);
+    });
+
+    socket.on("invite:created", handleInvite);
+    socket.on("matchRequest", handleInvite);
+    socket.on("invite:accepted", handleMatchCreated);
+    socket.on("like:accepted", handleMatchCreated);
+    socket.on("chat:match:created", handleMatchCreated);
     socket.on("invite:rejected", handleRemoval);
 
     return () => {
       socket.off("invite:created", handleInvite);
       socket.off("matchRequest", handleInvite);
-      socket.off("invite:accepted");
+      socket.off("invite:accepted", handleMatchCreated);
+      socket.off("like:accepted", handleMatchCreated);
+      socket.off("chat:match:created", handleMatchCreated);
       socket.off("invite:rejected", handleRemoval);
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("connect_error");
       socket.disconnect();
       realtimeSocketRef.current = null;
     };
   }, [currentUserId, loadMatches, token, upsertPendingRequest]);
 
   const handleSelect = useCallback(
-    (match: Match) => {
-      if (!match.conversationId) {
-        console.warn("Conversation missing for match", match);
-        return;
+    async (match: Match) => {
+      let selected = match;
+
+      if (!selected.conversationId) {
+        const participantId = selected.participantId ?? selected.senderId;
+        if (!participantId || !isObjectIdLike(participantId)) {
+          console.warn("Conversation and participant id missing for match", selected);
+          return;
+        }
+
+        try {
+          const { data } = await apiClient.post(CONVERSATION_START_ENDPOINT, {
+            participantId,
+          });
+
+          const conversationId =
+            readIdentifier((data as { conversationId?: unknown })?.conversationId) ??
+            (isRecord(data)
+              ? readIdentifier((data.data as { conversationId?: unknown } | undefined)?.conversationId)
+              : undefined);
+
+          if (!conversationId) {
+            throw new Error("Conversation id missing from start conversation response");
+          }
+
+          selected = {
+            ...selected,
+            id: conversationId,
+            conversationId,
+            participantId,
+          };
+
+          setMatches((prev) => {
+            const next = prev.filter(
+              (item) =>
+                item.conversationId !== conversationId &&
+                item.participantId !== participantId
+            );
+            return [selected, ...next];
+          });
+
+          setNewMatches((prev) =>
+            prev.map((item) =>
+              item.id === match.id || item.participantId === participantId
+                ? { ...item, conversationId, id: conversationId, participantId }
+                : item
+            )
+          );
+        } catch (error) {
+          console.error("Unable to start conversation from new match", error);
+          setRequestActionMessage("Unable to open chat for this match right now.");
+          return;
+        }
       }
-      if (selectedMatchId === match.id) {
+
+      if (selectedMatchId === selected.id) {
         setSelectedMatchId(null);
         setSelectedMatchFallback(null);
         return;
       }
-      setSelectedMatchId(match.id);
-      setSelectedMatchFallback(match);
+
+      setSelectedMatchId(selected.id);
+      setSelectedMatchFallback(selected);
     },
     [selectedMatchId]
   );
@@ -987,16 +1381,76 @@ export default function MessagesPage() {
       setRequestActionMessage(null);
 
       try {
-        await apiClient.post(`${INVITE_RESPOND_ENDPOINT}/${request.id}/${action}`, {
-          matchId: request.id,
-          conversationId: request.conversationId,
-          userId: currentUserId,
-        });
+        const isLikeRequest =
+          request.requestType === "like" ||
+          (!request.requestType && Boolean(request.senderId));
+
+        if (isLikeRequest) {
+          if (!request.senderId) {
+            throw new Error("Missing sender id for like response.");
+          }
+
+          await apiClient.post(`${LIKE_RESPOND_ENDPOINT}/${request.senderId}/${action}`);
+        } else {
+          const inviteAction = action === "decline" ? "reject" : "accept";
+          await apiClient.post(`${INVITE_RESPOND_ENDPOINT}/${request.id}/${inviteAction}`);
+        }
 
         if (action === "accept") {
+          const participantId = request.participantId ?? request.senderId;
+
+          if (participantId && isObjectIdLike(participantId)) {
+            const { data } = await apiClient.post(CONVERSATION_START_ENDPOINT, {
+              participantId,
+            });
+
+            const conversationId =
+              readIdentifier((data as { conversationId?: unknown })?.conversationId) ??
+              (isRecord(data)
+                ? readIdentifier((data.data as { conversationId?: unknown } | undefined)?.conversationId)
+                : undefined);
+
+            if (conversationId) {
+              const acceptedMatch: Match = {
+                ...request,
+                id: conversationId,
+                conversationId,
+                participantId,
+                requestType: undefined,
+                senderId: undefined,
+                lastMessage: request.lastMessage ?? "Say hello! 👋",
+                time: "Just now",
+              };
+
+              setNewMatches((prev) => {
+                const next = prev.filter(
+                  (item) =>
+                    item.conversationId !== conversationId &&
+                    item.id !== conversationId
+                );
+                return [acceptedMatch, ...next];
+              });
+
+              setMatches((prev) => {
+                const next = prev.filter(
+                  (item) =>
+                    item.conversationId !== conversationId &&
+                    item.id !== conversationId
+                );
+                return [acceptedMatch, ...next];
+              });
+            }
+          }
+
           await loadMatches();
         } else {
-          setPendingRequests((prev) => prev.filter((item) => item.id !== request.id));
+          setPendingRequests((prev) =>
+            prev.filter(
+              (item) =>
+                item.id !== request.id &&
+                (!request.senderId || item.senderId !== request.senderId)
+            )
+          );
         }
       } catch (error) {
         console.error("Unable to respond to match request", error);
@@ -1142,7 +1596,14 @@ export default function MessagesPage() {
                 <div className="flex-1 py-8 text-center text-xs text-gray-400">No new matches yet — keep exploring.</div>
               ) : (
                 newMatches.map((match) => (
-                  <NewMatchBubble key={match.id} match={match} onClick={() => handleSelect(match)} disabled={!match.conversationId} />
+                  <NewMatchBubble
+                    key={match.id}
+                    match={match}
+                    onClick={() => {
+                      void handleSelect(match);
+                    }}
+                    disabled={!match.conversationId && !match.participantId}
+                  />
                 ))
               )}
             </div>
@@ -1209,7 +1670,15 @@ export default function MessagesPage() {
                   </div>
                 ) : (
                   filteredMatches.map((match, index) => (
-                    <MessageCard key={match.id} match={match} active={selectedMatchId === match.id} onClick={() => handleSelect(match)} index={index} />
+                    <MessageCard
+                      key={match.id}
+                      match={match}
+                      active={selectedMatchId === match.id}
+                      onClick={() => {
+                        void handleSelect(match);
+                      }}
+                      index={index}
+                    />
                   ))
                 )}
               </div>
