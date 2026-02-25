@@ -8,6 +8,7 @@ import { LoginSchema, LoginValues } from "@/app/lib/validations/login-auth";
 import { useRouter } from "next/navigation";
 import { authAPI } from "@/lib/api";
 import { saveAuthData, UserInfo } from "@/lib/auth-utils";
+import { useAuth } from "@/context/AuthContext";
 
 
 export default function LoginForm() {
@@ -27,6 +28,8 @@ export default function LoginForm() {
         },
     });
 
+    const { login } = useAuth();
+
     const onSubmit = async (values: LoginValues) => {
         setSubmitError(null);
 
@@ -41,10 +44,14 @@ export default function LoginForm() {
             const userInfo = user as UserInfo;
             saveAuthData(token, userInfo);
 
+            // update auth context so UI updates immediately
+            // cast UserInfo to the AuthContext user shape to satisfy TypeScript
+            login({ token, user: userInfo as any });
+
             if (userInfo.role === "admin") {
                 router.push("/admin/users");
             } else {
-                router.push("/dashboard");
+                router.push("/sidebar/discover");
             }
 
             router.refresh();

@@ -331,8 +331,7 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
     readString(entry.preview) ??
     readString(entry.snippet) ??
     (isRecord(entry.lastMessage) ? readString(entry.lastMessage.body) : undefined) ??
-    (isRecord(entry.latestMessage) ? readString(entry.latestMessage.body) : undefined) ??
-    "Say hello! 👋";
+    (isRecord(entry.latestMessage) ? readString(entry.latestMessage.body) : undefined);
 
   const timestamp =
     readString(entry.lastMessageAt) ??
@@ -365,8 +364,8 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
     avatar,
     profileImage,
     avatarColor,
-    lastMessage,
-    time: formatRelativeTime(timestamp),
+    ...(lastMessage ? { lastMessage } : {}),
+    ...(timestamp ? { time: formatRelativeTime(timestamp) } : {}),
     unread: Math.max(0, Math.trunc(unread)),
     online,
     verified,
@@ -1069,6 +1068,37 @@ export default function MessagesPage() {
   const [requestActionMessage, setRequestActionMessage] = useState<string | null>(null);
   const realtimeSocketRef = useRef<Socket | null>(null);
 
+  const applyRecentMessageToLists = useCallback(
+    (message: ChatMessage) => {
+      const conversationKey = message.conversationId;
+      const isActiveConversation =
+        selectedMatchId === conversationKey ||
+        selectedMatchFallback?.conversationId === conversationKey;
+      const shouldIncreaseUnread = message.senderId !== currentUserId && !isActiveConversation;
+
+      const upsertRecentInList = (items: Match[]): Match[] => {
+        const index = items.findIndex(
+          (item) => item.conversationId === conversationKey || item.id === conversationKey
+        );
+        if (index === -1) return items;
+
+        const target = items[index];
+        const updated: Match = {
+          ...target,
+          lastMessage: message.body,
+          time: formatRelativeTime(message.createdAt),
+          unread: shouldIncreaseUnread ? target.unread + 1 : target.unread,
+        };
+
+        return [updated, ...items.filter((_, itemIndex) => itemIndex !== index)];
+      };
+
+      setMatches((prev) => upsertRecentInList(prev));
+      setNewMatches((prev) => upsertRecentInList(prev));
+    },
+    [currentUserId, selectedMatchFallback?.conversationId, selectedMatchId]
+  );
+
   const fetchMatchedUsers = useCallback(async (): Promise<Match[]> => {
     const accessToken = token ?? getStoredAccessToken();
 
@@ -1132,6 +1162,9 @@ export default function MessagesPage() {
           ...existing,
           ...match,
           conversationId: existing.conversationId ?? match.conversationId,
+          lastMessage: match.lastMessage ?? existing.lastMessage,
+          time: match.time ?? existing.time,
+          unread: Math.max(existing.unread ?? 0, match.unread ?? 0),
         });
       });
       setMatches(Array.from(mergedMatchesMap.values()));
@@ -1237,6 +1270,12 @@ export default function MessagesPage() {
       void loadMatches();
     };
 
+    const handleRealtimeMessage = (payload: unknown) => {
+      const normalized = normalizeSocketMessagePayload(payload);
+      if (!normalized) return;
+      applyRecentMessageToLists(normalized);
+    };
+
     socket.on("connect", () => {
       console.log("[socket] connected", {
         socketId: socket.id,
@@ -1257,6 +1296,7 @@ export default function MessagesPage() {
     socket.on("like:accepted", handleMatchCreated);
     socket.on("chat:match:created", handleMatchCreated);
     socket.on("invite:rejected", handleRemoval);
+    socket.on("receiveMessage", handleRealtimeMessage);
 
     return () => {
       socket.off("invite:created", handleInvite);
@@ -1265,13 +1305,14 @@ export default function MessagesPage() {
       socket.off("like:accepted", handleMatchCreated);
       socket.off("chat:match:created", handleMatchCreated);
       socket.off("invite:rejected", handleRemoval);
+      socket.off("receiveMessage", handleRealtimeMessage);
       socket.off("connect");
       socket.off("disconnect");
       socket.off("connect_error");
       socket.disconnect();
       realtimeSocketRef.current = null;
     };
-  }, [currentUserId, loadMatches, token, upsertPendingRequest]);
+  }, [applyRecentMessageToLists, currentUserId, loadMatches, token, upsertPendingRequest]);
 
   const handleSelect = useCallback(
     async (match: Match) => {

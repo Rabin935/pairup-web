@@ -26,7 +26,9 @@ type DiscoverUser = {
 type SwipeDirection = "left" | "right";
 
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?w=800&auto=format&fit=crop";
-const USERS_ENDPOINT = process.env.NEXT_PUBLIC_USERS_ENDPOINT ?? process.env.NEXT_PUBLIC_ADMIN_USERS_ENDPOINT ?? "/api/admin/users";
+const USERS_ENDPOINT = process.env.NEXT_PUBLIC_USERS_ENDPOINT ?? "/api/users/discover?includePrevious=false";
+const USERS_ENDPOINT_FALLBACK = "/api/users/discover";
+const USERS_ENDPOINT_LAST_RESORT = "/api/users?excludeSelf=true";
 
 const shuffle = <T,>(source: T[]): T[] => {
     const copy = [...source];
@@ -183,14 +185,14 @@ const fetchDiscoverUsers = async (): Promise<DiscoverUser[]> => {
         const response = await apiClient.get(USERS_ENDPOINT);
         return extractUsers(response.data);
     } catch (primaryError) {
-        console.warn("Primary users endpoint failed, trying fallback /api/admin/users", primaryError);
+        console.warn("Primary users endpoint failed, trying fallback /api/users/discover", primaryError);
         try {
-            const fallback = await apiClient.get("/api/admin/users");
+            const fallback = await apiClient.get(USERS_ENDPOINT_FALLBACK);
             return extractUsers(fallback.data);
         } catch (fallbackError) {
-            console.error("Fallback admin users endpoint failed", fallbackError);
+            console.error("Fallback discover users endpoint failed", fallbackError);
             try {
-                const lastResort = await apiClient.get("/admin/users");
+                const lastResort = await apiClient.get(USERS_ENDPOINT_LAST_RESORT);
                 return extractUsers(lastResort.data);
             } catch (lastResortError) {
                 console.error("All user endpoints failed", lastResortError);
@@ -274,7 +276,7 @@ export default function DiscoverPage() {
                 setLoading(false);
             }
         }
-    }, []);
+    }, [clearInviteNotice]);
 
     const resetDeck = useCallback(() => {
         setError(null);
@@ -289,7 +291,7 @@ export default function DiscoverPage() {
             .finally(() => {
                 setReloadPending(false);
             });
-    }, [loadUsers]);
+    }, [clearInviteNotice, loadUsers]);
 
     useEffect(() => {
         void loadUsers();
@@ -315,12 +317,29 @@ export default function DiscoverPage() {
             let restored = false;
 
             try {
-                // Right swipe now just removes the card locally; chat flow handles messaging.
+                const action = direction === "right" ? "like" : "dislike";
+                const response = await apiClient.post("/api/swipes", {
+                    swipedUserId: user.id,
+                    action,
+                });
+
+                if (direction === "right") {
+                    const responseMessage = isRecord(response.data) ? readString(response.data.message) : undefined;
+                    setInviteNoticeWithTimeout(responseMessage ?? `Invite sent to ${user.name}.`);
+                }
             } catch (err) {
-                setSwipeError("Unable to process swipe. Please try again.");
-                setUsers((prev) => [user, ...prev]);
-                restored = true;
-                console.error("Swipe submission failed", err);
+                const axiosError = err as AxiosError;
+                const payload = axiosError.response?.data;
+                const responseMessage = isRecord(payload) ? readString(payload.message) : undefined;
+
+                if (axiosError.response?.status === 409 && direction === "right") {
+                    setInviteNoticeWithTimeout(responseMessage ?? `You already liked ${user.name}.`);
+                } else {
+                    setSwipeError(responseMessage ?? "Unable to process swipe. Please try again.");
+                    setUsers((prev) => [user, ...prev]);
+                    restored = true;
+                    console.error("Swipe submission failed", err);
+                }
             } finally {
                 swipeQueueRef.current.delete(user.id);
             }
@@ -334,7 +353,7 @@ export default function DiscoverPage() {
                 }
             }
         },
-        [loadUsers]
+        [clearInviteNotice, loadUsers, setInviteNoticeWithTimeout]
     );
 
     const handleSwipeWrapper = useCallback(

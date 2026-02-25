@@ -24,6 +24,45 @@ interface CompleteProfileModalProps {
     initialData?: InitialProfileData | null;
 }
 
+type ApiErrorShape = {
+    response?: {
+        data?: {
+            message?: string;
+        };
+    };
+    message?: string;
+};
+
+const INTEREST_OPTIONS = [
+    "Travel",
+    "Music",
+    "Movies",
+    "Gaming",
+    "Fitness",
+    "Cooking",
+    "Photography",
+    "Reading",
+    "Art",
+    "Hiking",
+    "Coffee",
+    "Tech",
+];
+
+const normalizeInterestList = (interests?: string[] | string) => {
+    if (!interests) return [] as string[];
+    const source = Array.isArray(interests) ? interests : interests.split(",");
+    const seen = new Set<string>();
+    return source
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .filter((item) => {
+            const key = item.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+};
+
 export default function CompleteProfileModal({ open, onClose, onSuccess, initialData }: CompleteProfileModalProps) {
     const router = useRouter();
     const isEditMode = Boolean(initialData);
@@ -34,7 +73,8 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
     const [gender, setGender] = useState(initialData?.gender || "");
     const [age, setAge] = useState(initialData?.age?.toString() || "");
     const [location, setLocation] = useState(initialData?.location || "");
-    const [interests, setInterests] = useState<string>("");
+    const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+    const [interestInput, setInterestInput] = useState("");
     const [bio, setBio] = useState(initialData?.bio || "");
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(initialData?.profileImage || null);
@@ -42,11 +82,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const normalizedInterests = useMemo(() => {
-        if (!initialData?.interests) return "";
-        if (Array.isArray(initialData.interests)) return initialData.interests.join(", ");
-        return initialData.interests;
-    }, [initialData]);
+    const normalizedInterests = useMemo(() => normalizeInterestList(initialData?.interests), [initialData]);
 
     useEffect(() => {
         if (open) {
@@ -58,13 +94,39 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
             setAge(initialData?.age ? String(initialData.age) : "");
             setLocation(initialData?.location || "");
             setBio(initialData?.bio || "");
-            setInterests(normalizedInterests);
+            setSelectedInterests(normalizedInterests);
+            setInterestInput("");
             setPreview(initialData?.profileImage || null);
             setImageFile(null);
             setRemoveExistingImage(false);
             setError(null);
         }
     }, [open, initialData, normalizedInterests]);
+
+    const addInterest = (rawValue: string) => {
+        const nextValue = rawValue.trim();
+        if (!nextValue) return;
+
+        setSelectedInterests((current) => {
+            const exists = current.some((interest) => interest.toLowerCase() === nextValue.toLowerCase());
+            if (exists) return current;
+            return [...current, nextValue];
+        });
+        setInterestInput("");
+    };
+
+    const removeInterest = (target: string) => {
+        setSelectedInterests((current) => current.filter((interest) => interest !== target));
+    };
+
+    const toggleInterest = (interest: string) => {
+        const exists = selectedInterests.some((item) => item.toLowerCase() === interest.toLowerCase());
+        if (exists) {
+            removeInterest(interest);
+            return;
+        }
+        addInterest(interest);
+    };
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0] || null;
@@ -93,11 +155,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
             if (gender) formData.append("gender", gender);
             if (age) formData.append("age", age);
             if (location) formData.append("location", location);
-            const formattedInterests = interests
-                .split(",")
-                .map((interest) => interest.trim())
-                .filter(Boolean)
-                .join(", ");
+            const formattedInterests = selectedInterests.join(", ");
             if (formattedInterests) formData.append("interests", formattedInterests);
             if (bio) formData.append("bio", bio);
             if (imageFile) formData.append("profileImage", imageFile);
@@ -110,8 +168,9 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
             router.refresh();
             onSuccess?.();
             onClose();
-        } catch (err: any) {
-            const message = err?.response?.data?.message || err?.message || "Failed to update profile";
+        } catch (err: unknown) {
+            const apiError = err as ApiErrorShape;
+            const message = apiError?.response?.data?.message || apiError?.message || "Failed to update profile";
             setError(message);
         } finally {
             setIsSubmitting(false);
@@ -206,10 +265,9 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
                             >
                                 <option value="">Select gender</option>
-                                <option value="Female">Female</option>
-                                <option value="Male">Male</option>
-                                <option value="Non-binary">Non-binary</option>
-                                <option value="Prefer not to say">Prefer not to say</option>
+                                <option value="female">Female</option>
+                                <option value="male">Male</option>
+                                <option value="other">Other</option>
                             </select>
                         </label>
 
@@ -236,16 +294,78 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                         />
                     </label>
 
-                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-                        Interests
-                        <input
-                            type="text"
-                            value={interests}
-                            onChange={(event) => setInterests(event.target.value)}
-                            placeholder="Travel, Art, Coffee..."
-                            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
-                        />
-                    </label>
+                    <div className="space-y-3">
+                        <div>
+                            <p className="text-sm font-medium text-slate-700">Interests</p>
+                            <p className="mt-1 text-xs text-slate-500">Select interests or add your own.</p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                            {INTEREST_OPTIONS.map((interest) => {
+                                const isSelected = selectedInterests.some(
+                                    (item) => item.toLowerCase() === interest.toLowerCase()
+                                );
+                                return (
+                                    <button
+                                        key={interest}
+                                        type="button"
+                                        onClick={() => toggleInterest(interest)}
+                                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                                            isSelected
+                                                ? "border-violet-400 bg-violet-100 text-violet-700"
+                                                : "border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:text-violet-700"
+                                        }`}
+                                    >
+                                        {interest}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={interestInput}
+                                onChange={(event) => setInterestInput(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        addInterest(interestInput);
+                                    }
+                                }}
+                                placeholder="Add custom interest"
+                                className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => addInterest(interestInput)}
+                                className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+                            >
+                                Add
+                            </button>
+                        </div>
+
+                        {selectedInterests.length > 0 && (
+                            <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                {selectedInterests.map((interest) => (
+                                    <span
+                                        key={interest}
+                                        className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200"
+                                    >
+                                        {interest}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeInterest(interest)}
+                                            className="text-slate-400 hover:text-rose-500"
+                                            aria-label={`Remove ${interest}`}
+                                        >
+                                            x
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
                     <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
                         Bio

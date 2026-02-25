@@ -1,9 +1,20 @@
-import Navbar from "./_components/sidebar";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-white">
-      {/* <Navbar /> */}
-    </div>
-  );
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getAuthData } from "@/lib/auth-utils";
+
+export default function Page() {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (getAuthData()) {
+      router.replace("/sidebar/home");
+      return;
+    }
+
+    router.replace("/dashboard");
+  }, [router]);
+
+  return null;
 }
