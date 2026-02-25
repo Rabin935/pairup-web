@@ -1,36 +1,187 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+📄 PAIRUP — Modern MERN Dating Platform
+💘 PairUp – Full-Stack Swipe-to-Match Dating Platform
 
-## Getting Started
+PairUp is a production-ready Tinder-style dating application built using the MERN stack.
+It features real-time chat, swipe-based matching, admin moderation tools, analytics dashboards, and automated safety enforcement systems.
 
-First, run the development server:
+This project demonstrates full-stack architecture, real-time systems, and scalable moderation design.
 
-```bash
+🚀 Tech Stack
+Frontend
+
+Next.js (App Router)
+
+React
+
+Tailwind CSS
+
+Recharts
+
+Socket.io Client
+
+Backend
+
+Node.js
+
+Express.js
+
+MongoDB + Mongoose
+
+JWT Authentication
+
+Role-Based Access Control
+
+Socket.io
+
+Nodemailer
+
+🔐 Core Features
+👤 Authentication
+
+JWT-based login & signup
+
+Role-based access (User / Admin)
+
+Protected routes
+
+Password reset
+
+💘 Swipe-to-Match System
+
+Right swipe = Like
+
+Real-time like notifications
+
+Accept / Decline flow
+
+Automatic match creation
+
+Duplicate prevention
+
+💬 Real-Time Chat
+
+Socket.io integration
+
+Online/offline status
+
+Match-restricted messaging
+
+Message persistence
+
+Admin message moderation
+
+🚨 Safety & Moderation
+
+Report system
+
+Admin review panel
+
+Auto-ban after multiple reports
+
+Email notifications on ban
+
+AI-based keyword flagging
+
+Flagged content dashboard
+
+📊 Admin Analytics Dashboard
+
+Total users, matches, likes, messages
+
+Growth charts (daily users, matches, messages)
+
+Match rate calculation
+
+Gender distribution
+
+Top locations
+
+Engagement metrics
+
+🛡 Admin Controls
+
+Ban / Unban users
+
+Delete users
+
+Monitor conversations
+
+Review reports
+
+Auto-ban enforcement
+
+Email notification system
+
+🧠 Architecture Highlights
+
+Match-based chat restriction system
+
+MongoDB aggregation pipelines for analytics
+
+Real-time notification architecture
+
+Auto moderation logic
+
+Clean separation of concerns (controllers, routes, middleware)
+
+Scalable admin monitoring structure
+
+📸 Screenshots
+
+(Add screenshots here)
+
+Swipe Cards
+
+Real-Time Chat
+
+Admin Dashboard
+
+Analytics Charts
+
+Report Moderation Panel
+
+⚙ Installation
+1️⃣ Clone repository
+git clone https://github.com/yourusername/pairup.git
+2️⃣ Backend Setup
+cd backend
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create .env:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+MONGO_URI=your_mongo_uri
+JWT_SECRET=your_secret
+EMAIL_USER=your_email
+EMAIL_PASS=your_password
+3️⃣ Frontend Setup
+cd frontend
+npm install
+npm run dev
+🌱 Future Improvements
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+AI-based toxicity detection
 
-## Learn More
+Push notifications
 
-To learn more about Next.js, take a look at the following resources:
+Premium subscription model
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Swipe limits
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Deployment on AWS / Vercel / Render
 
-## Deploy on Vercel
+Microservice-based chat scaling
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+🎯 What This Project Demonstrates
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Full-stack application architecture
+
+Real-time communication systems
+
+Advanced MongoDB aggregation usage
+
+Role-based admin systems
+
+Moderation and safety enforcement logic
+
+Production-level thinking
