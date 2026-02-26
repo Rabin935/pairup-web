@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TinderCard from "react-tinder-card";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, MapPin, Sparkles, X } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import apiClient from "@/lib/api";
 import type { AxiosError } from "axios";
+import CompleteProfileModal from "@/app/profile/_components/CompleteProfileModal";
 
 type LooseRecord = Record<string, unknown>;
 
@@ -20,7 +21,26 @@ type DiscoverUser = {
     name: string;
     age?: number;
     bio?: string;
+    location?: string;
+    interests: string[];
+    gender?: string;
+    images: DiscoverImage[];
     thumbnail: string;
+};
+
+type ViewerProfile = {
+    firstname?: string;
+    lastname?: string;
+    email?: string;
+    phone?: string;
+    gender?: string;
+    interestedIn?: string;
+    age?: number;
+    location?: string;
+    interests?: string[] | string;
+    bio?: string;
+    profileImage?: string;
+    isProfileComplete?: boolean;
 };
 
 type SwipeDirection = "left" | "right";
@@ -29,6 +49,24 @@ const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1544723795-3fb6469f5b3
 const USERS_ENDPOINT = process.env.NEXT_PUBLIC_USERS_ENDPOINT ?? "/api/users/discover?includePrevious=false";
 const USERS_ENDPOINT_FALLBACK = "/api/users/discover";
 const USERS_ENDPOINT_LAST_RESORT = "/api/users?excludeSelf=true";
+const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "";
+
+const resolveImageUrl = (value: string | undefined) => {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (/^(https?:)?\/\//i.test(trimmed) || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+        return trimmed;
+    }
+    const base = API_BASE_URL.replace(/\/$/, "");
+    if (trimmed.startsWith("/")) {
+        return base ? `${base}${trimmed}` : trimmed;
+    }
+    return base ? `${base}/${trimmed.replace(/^\//, "")}` : trimmed;
+};
 
 const shuffle = <T,>(source: T[]): T[] => {
     const copy = [...source];
@@ -52,6 +90,17 @@ const readNumber = (value: unknown): number | undefined => {
     return undefined;
 };
 
+const readBoolean = (value: unknown): boolean | undefined => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (["true", "1", "yes"].includes(normalized)) return true;
+        if (["false", "0", "no"].includes(normalized)) return false;
+    }
+    return undefined;
+};
+
 const readIdentifier = (value: unknown): string | undefined => {
     if (typeof value === "string" && value.trim().length) return value;
     if (typeof value === "number" && Number.isFinite(value)) return value.toString();
@@ -64,9 +113,11 @@ const toImageList = (source: unknown): DiscoverImage[] => {
     return source
         .map((item) => {
             if (typeof item === "string") {
+                const resolved = resolveImageUrl(item);
+                if (!resolved) return null;
                 return {
                     id: item,
-                    url: item,
+                    url: resolved,
                     isThumbnail: false,
                 } as DiscoverImage;
             }
@@ -74,28 +125,39 @@ const toImageList = (source: unknown): DiscoverImage[] => {
             if (!isRecord(item)) return null;
 
             const url =
-                readString(item.url) ??
-                readString(item.secure_url) ??
-                readString(item.location) ??
-                readString(item.path) ??
-                readString(item.src);
+                resolveImageUrl(
+                    readString(item.url) ??
+                    readString(item.secure_url) ??
+                    readString(item.location) ??
+                    readString(item.path) ??
+                    readString(item.src)
+                );
 
             if (!url) return null;
 
             return {
                 id: readIdentifier(item.id) ?? readIdentifier(item._id) ?? readIdentifier(item.key) ?? url,
                 url,
-                isThumbnail: Boolean(item.isThumbnail ?? item.is_thumbnail ?? item.thumbnail),
+                isThumbnail: readBoolean(item.isThumbnail ?? item.is_thumbnail ?? item.thumbnail) ?? false,
             } as DiscoverImage;
         })
         .filter((image): image is DiscoverImage => Boolean(image));
 };
 
-const pickThumbnail = (images: DiscoverImage[], fallback?: string) => {
-    if (images.length) {
-        const thumbnail = images.find((image) => image.isThumbnail) ?? images[0];
-        if (thumbnail?.url) return thumbnail.url;
+const toInterests = (source: unknown): string[] => {
+    if (Array.isArray(source)) {
+        return source.map((item) => readString(item)).filter((value): value is string => Boolean(value));
     }
+    const value = readString(source);
+    if (!value) return [];
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+};
+
+const pickThumbnail = (images: DiscoverImage[], fallback?: string) => {
+    const explicitThumbnail = images.find((image) => image.isThumbnail);
+    if (explicitThumbnail?.url) return explicitThumbnail.url;
+    if (fallback) return fallback;
+    if (images[0]?.url) return images[0].url;
     return fallback ?? FALLBACK_IMAGE;
 };
 
@@ -163,10 +225,17 @@ const extractUsers = (payload: unknown): DiscoverUser[] => {
             const fallbackName = readString(entry.name) ?? "PairUp member";
             const name = [firstname, lastname].filter(Boolean).join(" ").trim() || fallbackName;
             const age = readNumber(entry.age) ?? readNumber(entry.userAge);
+            const images = toImageList(entry.images);
 
             const thumbnail = pickThumbnail(
-                toImageList(entry.images),
-                readString(entry.profileImage) ?? readString(entry.avatar) ?? readString(entry.photo)
+                images,
+                resolveImageUrl(
+                    readString(entry.profileImage) ??
+                    readString(entry.thumbnail) ??
+                    readString(entry.thumbnailUrl) ??
+                    readString(entry.avatar) ??
+                    readString(entry.photo)
+                )
             );
 
             return {
@@ -174,6 +243,10 @@ const extractUsers = (payload: unknown): DiscoverUser[] => {
                 name,
                 age,
                 bio: readString(entry.bio) ?? readString(entry.about),
+                location: readString(entry.location),
+                interests: toInterests(entry.interests),
+                gender: readString(entry.gender),
+                images,
                 thumbnail,
             } as DiscoverUser;
         })
@@ -185,11 +258,19 @@ const fetchDiscoverUsers = async (): Promise<DiscoverUser[]> => {
         const response = await apiClient.get(USERS_ENDPOINT);
         return extractUsers(response.data);
     } catch (primaryError) {
+        const primaryAxiosError = primaryError as AxiosError;
+        if (primaryAxiosError.response?.status === 403) {
+            throw primaryError;
+        }
         console.warn("Primary users endpoint failed, trying fallback /api/users/discover", primaryError);
         try {
             const fallback = await apiClient.get(USERS_ENDPOINT_FALLBACK);
             return extractUsers(fallback.data);
         } catch (fallbackError) {
+            const fallbackAxiosError = fallbackError as AxiosError;
+            if (fallbackAxiosError.response?.status === 403) {
+                throw fallbackError;
+            }
             console.error("Fallback discover users endpoint failed", fallbackError);
             try {
                 const lastResort = await apiClient.get(USERS_ENDPOINT_LAST_RESORT);
@@ -209,9 +290,13 @@ type LoadOptions = {
 
 export default function DiscoverPage() {
     const [users, setUsers] = useState<DiscoverUser[]>([]);
+    const [selectedUser, setSelectedUser] = useState<DiscoverUser | null>(null);
     const [deckVersion, setDeckVersion] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [profileGateMessage, setProfileGateMessage] = useState<string | null>(null);
+    const [viewerProfile, setViewerProfile] = useState<ViewerProfile | null>(null);
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [swipeError, setSwipeError] = useState<string | null>(null);
     const [inviteNotice, setInviteNotice] = useState<string | null>(null);
     const inviteNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -219,6 +304,34 @@ export default function DiscoverPage() {
     const swipeQueueRef = useRef<Set<string>>(new Set());
     const autoReloadingRef = useRef(false);
     const initialDeckRef = useRef<DiscoverUser[]>([]);
+
+    const fetchViewerProfile = useCallback(async () => {
+        const response = await apiClient.get("/api/users/me");
+        const payload = isRecord(response.data) ? (response.data as LooseRecord) : {};
+        const data = isRecord(payload.data) ? (payload.data as LooseRecord) : payload;
+        const profile: ViewerProfile = {
+            firstname: readString(data.firstname),
+            lastname: readString(data.lastname),
+            email: readString(data.email),
+            phone: readString(data.phone ?? data.number),
+            gender: readString(data.gender),
+            interestedIn: readString(data.interestedIn),
+            age: readNumber(data.age),
+            location: readString(data.location),
+            interests: Array.isArray(data.interests) ? (data.interests as string[]) : readString(data.interests),
+            bio: readString(data.bio),
+            profileImage: resolveImageUrl(readString(data.profileImage)),
+            isProfileComplete: readBoolean(data.isProfileComplete),
+        };
+        setViewerProfile(profile);
+        const complete = Boolean(profile.isProfileComplete && profile.interestedIn);
+        setProfileGateMessage(
+            complete
+                ? null
+                : "Complete your profile and choose who you are interested in to unlock Discover."
+        );
+        return complete;
+    }, []);
 
     const clearInviteNotice = useCallback(() => {
         if (inviteNoticeTimerRef.current) {
@@ -253,6 +366,14 @@ export default function DiscoverPage() {
         setSwipeError(null);
         clearInviteNotice();
         try {
+            const canAccessDiscover = await fetchViewerProfile();
+            if (!canAccessDiscover) {
+                setUsers([]);
+                setDeckVersion((prev) => prev + 1);
+                swipeQueueRef.current.clear();
+                return;
+            }
+
             const data = await fetchDiscoverUsers();
             if (data.length > 0) {
                 const randomized = shuffle(data);
@@ -266,8 +387,21 @@ export default function DiscoverPage() {
             setDeckVersion((prev) => prev + 1);
             swipeQueueRef.current.clear();
         } catch (err) {
-            console.error("Failed to fetch discover users", err);
-            setError("Unable to load discover matches. Please try again.");
+            const axiosError = err as AxiosError;
+            const payload = axiosError.response?.data;
+            const payloadRecord = isRecord(payload) ? payload : undefined;
+            const errorCode = readString(payloadRecord?.code);
+            const message = readString(payloadRecord?.message);
+
+            if (axiosError.response?.status === 403 && errorCode === "PROFILE_INCOMPLETE") {
+                setUsers([]);
+                setProfileGateMessage(
+                    message || "Complete your profile and choose who you are interested in to unlock Discover."
+                );
+            } else {
+                console.error("Failed to fetch discover users", err);
+                setError("Unable to load discover matches. Please try again.");
+            }
             if (fallbackToCached && initialDeckRef.current.length) {
                 setUsers([...initialDeckRef.current]);
             }
@@ -276,7 +410,7 @@ export default function DiscoverPage() {
                 setLoading(false);
             }
         }
-    }, [clearInviteNotice]);
+    }, [clearInviteNotice, fetchViewerProfile]);
 
     const resetDeck = useCallback(() => {
         setError(null);
@@ -399,6 +533,23 @@ export default function DiscoverPage() {
             );
         }
 
+        if (profileGateMessage) {
+            return (
+                <div className="rounded-3xl border border-amber-300 bg-amber-50 p-8 text-center">
+                    <p className="text-base font-semibold text-amber-800">{profileGateMessage}</p>
+                    <p className="mt-2 text-sm text-amber-700">
+                        You must complete your profile before accessing Discover.
+                    </p>
+                    <button
+                        onClick={() => setIsProfileModalOpen(true)}
+                        className="mt-4 inline-flex items-center justify-center rounded-full bg-amber-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700"
+                    >
+                        Complete Profile
+                    </button>
+                </div>
+            );
+        }
+
         if (!users.length) {
             return (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-white/80 p-10 text-center shadow-sm">
@@ -442,12 +593,16 @@ export default function DiscoverPage() {
                                     transform: `translateY(${translateY}px) scale(${scale})`,
                                     zIndex: 10 + depth,
                                 }}
+                                onClick={() => setSelectedUser(user)}
                             >
                                 <img
                                     src={user.thumbnail}
                                     alt={user.name}
                                     className="absolute inset-0 h-full w-full object-cover"
                                     loading="lazy"
+                                    onError={(event) => {
+                                        event.currentTarget.src = FALLBACK_IMAGE;
+                                    }}
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
 
@@ -463,10 +618,10 @@ export default function DiscoverPage() {
                                     {user.bio && <p className="text-sm text-white/80 line-clamp-3">{user.bio}</p>}
                                     <div className="flex gap-3">
                                         <span className="rounded-full bg-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80">
-                                            Swipe left ↺
+                                            Left = Pass
                                         </span>
                                         <span className="rounded-full bg-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80">
-                                            Swipe right → Next
+                                            Right = Like
                                         </span>
                                     </div>
                                 </div>
@@ -502,6 +657,69 @@ export default function DiscoverPage() {
                     {renderContent()}
                 </div>
             </div>
+
+            {selectedUser && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+                    onClick={() => setSelectedUser(null)}
+                >
+                    <div
+                        className="relative w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setSelectedUser(null)}
+                            className="absolute right-4 top-4 z-10 rounded-full bg-white/90 p-2 text-slate-700 shadow"
+                        >
+                            <X size={18} />
+                        </button>
+                        <img
+                            src={selectedUser.thumbnail}
+                            alt={selectedUser.name}
+                            className="h-72 w-full object-cover"
+                            onError={(event) => {
+                                event.currentTarget.src = FALLBACK_IMAGE;
+                            }}
+                        />
+                        <div className="space-y-4 p-6">
+                            <h3 className="text-2xl font-bold text-slate-900">
+                                {selectedUser.name}
+                                {selectedUser.age ? `, ${selectedUser.age}` : ""}
+                            </h3>
+                            {selectedUser.location && (
+                                <p className="flex items-center gap-2 text-sm text-slate-600">
+                                    <MapPin size={16} className="text-rose-500" />
+                                    {selectedUser.location}
+                                </p>
+                            )}
+                            {selectedUser.bio && <p className="text-sm text-slate-700">{selectedUser.bio}</p>}
+                            {selectedUser.interests.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {selectedUser.interests.map((interest) => (
+                                        <span
+                                            key={`${selectedUser.id}-${interest}`}
+                                            className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700"
+                                        >
+                                            {interest}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <CompleteProfileModal
+                open={isProfileModalOpen}
+                onClose={() => setIsProfileModalOpen(false)}
+                initialData={viewerProfile}
+                onSuccess={() => {
+                    setIsProfileModalOpen(false);
+                    void loadUsers();
+                }}
+            />
         </ProtectedRoute>
     );
 }

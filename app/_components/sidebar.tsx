@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getAuthData } from "@/lib/auth-utils";
-import { Heart, Home, Compass, Search, Plus, MessageCircle, User, ChevronLeft, ChevronRight, Settings, LogOut } from "lucide-react";
+import { Heart, Home, Compass, Search, Plus, MessageCircle, User, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 
 const NAV_LINKS = [
     { label: "Home", href: "/sidebar/home", icon: Home },
@@ -17,12 +17,10 @@ const NAV_LINKS = [
 
 export default function Navbar() {
     const pathname = usePathname();
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(getAuthData()));
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     useEffect(() => {
-        setIsAuthenticated(Boolean(getAuthData()));
-
         const handleStorage = () => {
             setIsAuthenticated(Boolean(getAuthData()));
         };
@@ -142,7 +140,7 @@ export default function Navbar() {
                         <div className="rounded-xl bg-white/10 backdrop-blur-md px-4 py-3.5 text-sm text-white/90 border border-white/20 space-y-2.5">
                             <div>
                                 <p className="font-semibold text-white flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                                    <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
                                     Logged in
                                 </p>
                                 <p className="text-xs text-white/70 mt-1">Manage your profile</p>

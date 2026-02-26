@@ -10,6 +10,7 @@ type InitialProfileData = {
     email?: string;
     phone?: string;
     gender?: string;
+    interestedIn?: string;
     age?: number;
     location?: string;
     interests?: string[] | string;
@@ -71,6 +72,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
     const [email, setEmail] = useState(initialData?.email || "");
     const [phone, setPhone] = useState(initialData?.phone || "");
     const [gender, setGender] = useState(initialData?.gender || "");
+    const [interestedIn, setInterestedIn] = useState(initialData?.interestedIn || "");
     const [age, setAge] = useState(initialData?.age?.toString() || "");
     const [location, setLocation] = useState(initialData?.location || "");
     const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
@@ -91,6 +93,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
             setEmail(initialData?.email || "");
             setPhone(initialData?.phone || "");
             setGender(initialData?.gender || "");
+            setInterestedIn(initialData?.interestedIn || "");
             setAge(initialData?.age ? String(initialData.age) : "");
             setLocation(initialData?.location || "");
             setBio(initialData?.bio || "");
@@ -153,6 +156,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
             if (email) formData.append("email", email);
             if (phone) formData.append("phone", phone);
             if (gender) formData.append("gender", gender);
+            if (interestedIn) formData.append("interestedIn", interestedIn);
             if (age) formData.append("age", age);
             if (location) formData.append("location", location);
             const formattedInterests = selectedInterests.join(", ");
@@ -282,6 +286,19 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                             />
                         </label>
                     </div>
+
+                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                        Interested In
+                        <select
+                            value={interestedIn}
+                            onChange={(event) => setInterestedIn(event.target.value)}
+                            className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
+                        >
+                            <option value="">Select preference</option>
+                            <option value="female">Women</option>
+                            <option value="male">Men</option>
+                        </select>
+                    </label>
 
                     <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
                         Location

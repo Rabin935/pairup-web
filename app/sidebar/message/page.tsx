@@ -1,6 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  ArrowLeft,
+  Flame,
+  Heart,
+  Info,
+  MessageCircle,
+  Paperclip,
+  Phone,
+  Search,
+  Send,
+  Star,
+  Video,
+} from "lucide-react";
 import { io, type Socket } from "socket.io-client";
 
 import { useAuth } from "@/context/AuthContext";
@@ -354,7 +367,7 @@ const buildMatchFromRecord = (entry: unknown, index: number, currentUserId?: str
     readBoolean(entry.isOnline) ??
     false;
   const verified = readBoolean(participant?.verified) ?? readBoolean(entry.verified) ?? false;
-  const tag = extractTag(participant) ?? "✨ Match";
+  const tag = extractTag(participant) ?? "Match";
 
   return {
     id: recordId,
@@ -539,7 +552,7 @@ const buildMatchFromInviteEvent = (payload: unknown): Match | null => {
     unread: 0,
     online: false,
     verified: false,
-    tag: tagParts.join(" • ") || "Invite",
+    tag: tagParts.join(" - ") || "Invite",
   };
 };
 
@@ -617,45 +630,11 @@ const NewMatchBubble = ({ match, onClick, disabled }: { match: Match; onClick: (
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex flex-col items-center gap-2 flex-shrink-0 group ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+    className={`w-full p-4 rounded-2xl bg-white border border-violet-100 hover:border-violet-300 hover:bg-violet-50 transition-all duration-200 hover:shadow-lg cursor-pointer group text-left ${
+      disabled ? "opacity-50 cursor-not-allowed" : ""
+    }`}
   >
-    <div className="relative">
-      <div className="w-[68px] h-[68px] rounded-full bg-gradient-to-br from-violet-400 via-purple-500 to-indigo-600 p-[2.5px] shadow-md shadow-violet-200/60 group-hover:shadow-violet-300/80 group-hover:scale-105 transition-all duration-200">
-        <div className="w-full h-full rounded-full bg-white p-[2px]">
-          {match.profileImage ? (
-            <img
-              src={match.profileImage}
-              alt={match.name}
-              className="w-full h-full rounded-full object-cover"
-            />
-          ) : (
-            <div className={`w-full h-full rounded-full bg-gradient-to-br ${match.avatarColor} flex items-center justify-center text-white font-bold text-lg`}>
-              {match.avatar}
-            </div>
-          )}
-        </div>
-      </div>
-      {match.online && (
-        <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white" />
-      )}
-    </div>
-    <span className="text-xs font-medium text-gray-700 group-hover:text-violet-700 transition-colors">{match.name}</span>
-  </button>
-);
-
-const MessageCard = ({ match, active, onClick, index }: { match: Match; active: boolean; onClick: () => void; index: number }) => {
-  const tagLabel = match.tag && match.tag.trim().length ? match.tag : "✨ Match";
-  const timeLabel = match.time || "Recently";
-  const preview = match.lastMessage || "Say hello! 👋";
-
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-4 px-5 py-4 transition-all duration-200 relative group ${
-        active ? "bg-violet-50 border-l-[3px] border-violet-500" : "hover:bg-gray-50 border-l-[3px] border-transparent"
-      }`}
-      style={{ animationDelay: `${index * 0.05}s` }}
-    >
+    <div className="flex gap-3 items-start">
       <Avatar
         letter={match.avatar}
         color={match.avatarColor}
@@ -665,24 +644,52 @@ const MessageCard = ({ match, active, onClick, index }: { match: Match; active: 
         imageUrl={match.profileImage}
         alt={match.name}
       />
+      <div className="flex-1 min-w-0">
+        <h3 className="font-bold text-gray-900">{match.name}</h3>
+        <p className="text-sm text-gray-600 truncate">{match.lastMessage ?? "Say hello!"}</p>
+        <p className="text-xs text-gray-500 mt-1">{match.time ?? "Recently"}</p>
+      </div>
+      <Heart size={18} className="text-violet-400 flex-shrink-0" />
+    </div>
+  </button>
+);
 
-      <div className="flex-1 min-w-0 text-left">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-1.5">
-            <span className={`font-semibold text-sm ${active ? "text-violet-700" : "text-gray-900"}`}>{match.name}</span>
-            <span className="text-[11px] text-gray-400 bg-gray-50 border border-gray-100 px-1.5 py-0.5 rounded-full">{tagLabel}</span>
+const MessageCard = ({ match, active, onClick, index }: { match: Match; active: boolean; onClick: () => void; index: number }) => {
+  const timeLabel = match.time || "Recently";
+  const preview = match.lastMessage || "Say hello!";
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full p-4 rounded-2xl border transition-all duration-200 cursor-pointer group text-left ${
+        active
+          ? "bg-gradient-to-r from-violet-100 to-violet-50 border-violet-300 shadow-lg"
+          : "bg-white border-violet-100 hover:border-violet-300 hover:bg-violet-50 hover:shadow-lg"
+      }`}
+      style={{ animation: `slideIn 0.4s ease-out ${index * 0.1}s backwards` }}
+    >
+      <div className="flex gap-3 items-start">
+        <Avatar
+          letter={match.avatar}
+          color={match.avatarColor}
+          online={match.online}
+          size="md"
+          verified={match.verified}
+          imageUrl={match.profileImage}
+          alt={match.name}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-bold text-gray-900">{match.name}</h3>
+            <span className="text-xs text-gray-500">{timeLabel}</span>
           </div>
-          <span className={`text-[11px] flex-shrink-0 ${match.unread > 0 ? "text-violet-600 font-semibold" : "text-gray-400"}`}>{timeLabel}</span>
+          <p className="text-sm text-gray-600 truncate">{preview}</p>
         </div>
-
-        <div className="flex items-center justify-between">
-          <p className={`text-xs truncate max-w-[220px] ${match.unread > 0 ? "text-gray-800 font-medium" : "text-gray-500"}`}>{preview}</p>
-          {match.unread > 0 && (
-            <span className="flex-shrink-0 ml-2 min-w-[20px] h-5 rounded-full bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center px-1.5">
-              {match.unread}
-            </span>
-          )}
-        </div>
+        {match.unread > 0 && (
+          <div className="w-6 h-6 rounded-full bg-gradient-to-r from-violet-500 to-violet-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+            {match.unread}
+          </div>
+        )}
       </div>
     </button>
   );
@@ -699,62 +706,59 @@ const PendingRequestCard = ({
   onDecline: () => void;
   busy?: "accept" | "decline" | null;
 }) => (
-  <div className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl border border-violet-100 bg-gradient-to-br from-white to-violet-50/60">
-    <Avatar
-      letter={request.avatar}
-      color={request.avatarColor}
-      online={request.online}
-      size="sm"
-      verified={request.verified}
-      imageUrl={request.profileImage}
-      alt={request.name}
-    />
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center justify-between">
-        <p className="font-semibold text-sm text-gray-900 truncate">{request.name}</p>
-        <span className="text-[11px] text-gray-400 flex-shrink-0">{request.time ?? "Just now"}</span>
+  <div className="p-4 rounded-2xl bg-gradient-to-br from-violet-50 to-white border border-violet-200 hover:border-violet-300 transition-all duration-200 hover:shadow-lg">
+    <div className="flex gap-3 mb-3">
+      <Avatar
+        letter={request.avatar}
+        color={request.avatarColor}
+        online={request.online}
+        size="md"
+        verified={request.verified}
+        imageUrl={request.profileImage}
+        alt={request.name}
+      />
+      <div className="flex-1 min-w-0">
+        <h3 className="font-bold text-gray-900 truncate">{request.name}</h3>
+        <p className="text-xs text-gray-600">{request.time ?? "Just now"}</p>
+        <div className="flex items-center gap-1 mt-1">
+          <Flame size={14} className="text-orange-500" />
+          <span className="text-xs font-semibold text-orange-600">{request.tag ?? "Great match"}</span>
+        </div>
       </div>
-      <p className="text-xs text-gray-500 mt-1 truncate">
-        Wants to match with you · {request.tag ?? "Great vibes"}
-      </p>
-      <div className="flex gap-2 mt-3">
-        <button
-          onClick={onDecline}
-          disabled={Boolean(busy)}
-          className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${
-            busy
-              ? "border-gray-200 text-gray-400 bg-gray-50 cursor-wait"
-              : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"
-          }`}
-        >
-          Decline
-        </button>
-        <button
-          onClick={onAccept}
-          disabled={Boolean(busy)}
-          className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold text-white transition-transform ${
-            busy
-              ? "bg-violet-300 cursor-wait"
-              : "bg-gradient-to-r from-violet-500 to-violet-700 hover:scale-[1.01] shadow-md shadow-violet-200/50"
-          }`}
-        >
-          {busy === "accept" ? "Matching…" : "Accept & Match"}
-        </button>
-      </div>
+    </div>
+
+    <div className="flex gap-2">
+      <button
+        onClick={onDecline}
+        disabled={Boolean(busy)}
+        className={`flex-1 py-2 rounded-lg border font-semibold transition-all duration-200 text-sm ${
+          busy
+            ? "border-gray-200 text-gray-400 bg-gray-50 cursor-wait"
+            : "border-gray-300 text-gray-700 hover:bg-gray-50"
+        }`}
+      >
+        Decline
+      </button>
+      <button
+        onClick={onAccept}
+        disabled={Boolean(busy)}
+        className={`flex-1 py-2 rounded-lg text-white font-semibold transition-all duration-200 text-sm ${
+          busy ? "bg-violet-300 cursor-wait" : "bg-gradient-to-r from-violet-500 to-violet-600 hover:shadow-lg"
+        }`}
+      >
+        {busy === "accept" ? "Matching..." : "Accept"}
+      </button>
     </div>
   </div>
 );
 
 const EmptyState = () => (
-  <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8 py-20">
-    <div className="w-20 h-20 rounded-full bg-violet-50 border border-violet-100 flex items-center justify-center text-4xl">💜</div>
-    <div>
-      <h3 className="font-display font-bold text-gray-900 text-xl mb-2">Select a conversation</h3>
-      <p className="text-gray-500 text-sm leading-relaxed max-w-xs">Choose a match from the left to start chatting, or send a hello to your new matches above.</p>
+  <div className="hidden md:flex flex-1 items-center justify-center bg-white rounded-3xl border border-violet-100 shadow-xl">
+    <div className="text-center px-8">
+      <MessageCircle size={64} className="mx-auto text-gray-300 mb-4" />
+      <h3 className="text-2xl font-bold text-gray-900 mb-2">No chat selected</h3>
+      <p className="text-gray-600">Select a chat to start messaging</p>
     </div>
-    <button className="mt-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-violet-700 text-white text-sm font-semibold shadow-lg shadow-violet-200/60 hover:scale-105 active:scale-95 transition-transform duration-200">
-      Start Swiping ✨
-    </button>
   </div>
 );
 
@@ -936,62 +940,72 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-violet-100 bg-white">
-        <Avatar
-          letter={match.avatar}
-          color={match.avatarColor}
-          online={match.online}
-          size="sm"
-          verified={match.verified}
-          imageUrl={match.profileImage}
-          alt={match.name}
-        />
-        <div className="flex-1">
-          <p className="font-semibold text-gray-900 text-sm">{match.name}</p>
-          <p className={`text-xs ${match.online ? "text-emerald-500" : "text-gray-400"}`}>{match.online ? "● Online now" : "● Last seen recently"}</p>
-        </div>
-        <div className="flex items-center gap-1.5">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div className="flex items-center justify-between p-4 sm:p-6 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-white">
+        <div className="flex items-center gap-3 flex-1">
           <button
-            onClick={() => (window.location.href = `/chat/${conversationId}`)}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+            onClick={onClose}
+            className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            Open Chat →
+            <ArrowLeft size={20} className="text-gray-700" />
           </button>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center transition-colors">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" className="w-3.5 h-3.5">
-              <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <Avatar
+            letter={match.avatar}
+            color={match.avatarColor}
+            online={match.online}
+            size="sm"
+            verified={match.verified}
+            imageUrl={match.profileImage}
+            alt={match.name}
+          />
+          <div>
+            <h2 className="font-bold text-gray-900">{match.name}</h2>
+            <p className="text-xs text-gray-600">{match.online ? "Active now" : "Active recently"}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button className="p-2.5 hover:bg-violet-100 rounded-lg transition-colors text-violet-600">
+            <Phone size={20} />
+          </button>
+          <button className="p-2.5 hover:bg-violet-100 rounded-lg transition-colors text-violet-600">
+            <Video size={20} />
+          </button>
+          <button className="p-2.5 hover:bg-violet-100 rounded-lg transition-colors text-violet-600">
+            <Info size={20} />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 bg-gradient-to-b from-violet-50/20 to-white custom-scroll" style={{ maxHeight: "340px" }}>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-gradient-to-b from-white to-violet-50/20 custom-scroll">
         {error && (
           <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-500">{error}</div>
         )}
 
         {isLoading ? (
-          <div className="text-center text-xs text-gray-400 py-6">Loading messages…</div>
+          <div className="text-center text-xs text-gray-400 py-6">Loading messages...</div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-6 text-sm text-gray-500">
-            <span className="text-2xl">💬</span>
-            <p>No messages yet — say hi!</p>
+            <MessageCircle size={24} className="text-gray-400" />
+            <p>No messages yet. Say hi!</p>
           </div>
         ) : (
-          messages.map((message) => (
-            <div key={message.id} className={`flex ${message.senderId === currentUserId ? "justify-end" : "justify-start"}`}>
+          messages.map((message, idx) => (
+            <div
+              key={message.id}
+              className={`flex ${message.senderId === currentUserId ? "justify-end" : "justify-start"}`}
+              style={{ animation: `fadeIn 0.3s ease-out ${idx * 0.05}s backwards` }}
+            >
               <div
-                className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${
+                className={`max-w-xs lg:max-w-md px-4 py-2.5 rounded-2xl ${
                   message.senderId === currentUserId
-                    ? "bg-gradient-to-br from-violet-500 to-violet-700 text-white rounded-br-md"
-                    : "bg-white border border-violet-100 text-gray-800 rounded-bl-md"
+                    ? "bg-gradient-to-r from-violet-500 to-violet-600 text-white rounded-br-none"
+                    : "bg-gray-100 text-gray-900 rounded-bl-none"
                 }`}
               >
-                <p>{message.body}</p>
+                <p className="text-sm">{message.body}</p>
                 <span className="mt-1 block text-[10px] opacity-70">
                   {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  {message.senderId === currentUserId && message.status === "pending" ? " · sending…" : ""}
+                  {message.senderId === currentUserId && message.status === "pending" ? " · sending..." : ""}
                 </span>
               </div>
             </div>
@@ -1000,28 +1014,26 @@ const MiniChat = ({ match, conversationId, currentUserId, onClose }: MiniChatPro
         <div ref={bottomRef} />
       </div>
 
-      <div className="px-4 py-3 border-t border-violet-100 bg-white">
-        <div className="flex items-center gap-2 bg-violet-50 border border-violet-100 rounded-xl px-3 py-2 focus-within:border-violet-300 focus-within:ring-2 focus-within:ring-violet-100 transition-all">
+      <div className="p-4 sm:p-6 border-t border-violet-100 bg-white">
+        <div className="flex gap-3">
+          <button className="p-2.5 hover:bg-violet-100 rounded-lg transition-colors text-violet-600 flex-shrink-0">
+            <Paperclip size={20} />
+          </button>
           <input
             type="text"
             value={messageInput}
             onChange={(event) => setMessageInput(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Message ${match.name}...`}
-            className="flex-1 bg-transparent text-sm text-gray-800 placeholder-gray-400 focus:outline-none"
+            className="flex-1 px-4 py-2.5 rounded-xl bg-gray-100 text-gray-500 border border-gray-200 focus:outline-none focus:border-violet-500 focus:bg-white transition-all duration-200"
             disabled={!socketReady || !currentUserId}
           />
           <button
             onClick={handleSend}
             disabled={!messageInput.trim() || !socketReady || !currentUserId}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 ${
-              messageInput.trim() && socketReady && currentUserId ? "bg-gradient-to-br from-violet-500 to-violet-700 hover:scale-105 active:scale-95" : "bg-violet-100 cursor-not-allowed"
-            }`}
+            className="p-2.5 bg-gradient-to-r from-violet-500 to-violet-600 hover:shadow-lg text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
           >
-            <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5">
-              <path d="M22 2L11 13" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <Send size={20} />
           </button>
         </div>
       </div>
@@ -1062,6 +1074,7 @@ export default function MessagesPage() {
   const [pendingError, setPendingError] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [selectedMatchFallback, setSelectedMatchFallback] = useState<Match | null>(null);
+  const [activeTab, setActiveTab] = useState<"requests" | "new" | "chats">("chats");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "online">("all");
   const [requestActionState, setRequestActionState] = useState<Record<string, "accept" | "decline" | null>>({});
@@ -1408,6 +1421,16 @@ export default function MessagesPage() {
     });
   }, [matches, search, filter]);
 
+  const filteredNewMatches = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return newMatches.filter(
+      (match) =>
+        !query ||
+        match.name.toLowerCase().includes(query) ||
+        (match.lastMessage ?? "").toLowerCase().includes(query)
+    );
+  }, [newMatches, search]);
+
   const totalUnread = useMemo(() => matches.reduce((total, match) => total + match.unread, 0), [matches]);
   const onlineCount = useMemo(() => matches.filter((match) => match.online).length, [matches]);
 
@@ -1459,7 +1482,7 @@ export default function MessagesPage() {
                 participantId,
                 requestType: undefined,
                 senderId: undefined,
-                lastMessage: request.lastMessage ?? "Say hello! 👋",
+                lastMessage: request.lastMessage ?? "Say hello!",
                 time: "Just now",
               };
 
@@ -1504,296 +1527,250 @@ export default function MessagesPage() {
   );
 
   return (
-    <>
+    <div className="min-h-screen bg-gradient-to-b from-white via-violet-50/30 to-white">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Outfit:wght@300;400;500;600&display=swap');
-        * { font-family: 'Outfit', sans-serif; }
-        .font-display { font-family: 'Playfair Display', serif; }
-
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
         @keyframes slideIn {
-          from { opacity: 0; transform: translateX(20px); }
-          to   { opacity: 1; transform: translateX(0); }
+          from {
+            opacity: 0;
+            transform: translateX(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
         }
 
-        .fade-up  { animation: fadeUp 0.4s ease both; }
-        .slide-in { animation: slideIn 0.3s ease both; }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
 
-        .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #ede9fe; border-radius: 2px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #ddd6fe; border-radius: 999px; }
       `}</style>
 
-      <div className="min-h-screen bg-gray-50/60 flex flex-col">
-        <header className="bg-white border-b border-violet-100 sticky top-0 z-30 shadow-sm shadow-violet-50/60">
-          <div className="max-w-5xl mx-auto px-5 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => window.history.back()}
-                className="w-9 h-9 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center hover:bg-violet-100 transition-colors"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="font-display font-bold text-gray-900 text-xl">Messages</h1>
-                  {totalUnread > 0 && <span className="bg-violet-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{totalUnread}</span>}
-                </div>
-                <p className="text-xs text-gray-400">
-                  {matches.length} matches · {onlineCount} online
-                </p>
-              </div>
+      <div className="max-w-8xl mx-auto h-screen flex flex-col">
+        <div className="sticky top-0 z-40 bg-white bg-opacity-95 backdrop-blur-lg border-b border-violet-100">
+          <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.2em] text-violet-600 font-semibold">Messages</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Connections</h1>
+              <p className="text-xs text-gray-500 mt-1">{matches.length} chats · {onlineCount} online</p>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button className="w-9 h-9 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center hover:bg-violet-100 transition-colors">
-                <svg viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-              </button>
-              <button
-                onClick={() => (window.location.href = "/chat")}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-violet-700 text-white text-sm font-semibold shadow-md shadow-violet-200/50 hover:scale-105 active:scale-95 transition-transform duration-200"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                Open Full Chat
-              </button>
+            <div className="rounded-full bg-gradient-to-br from-violet-400 to-violet-600 p-3 text-white">
+              <MessageCircle size={24} />
             </div>
           </div>
-        </header>
-
-        <div className="max-w-5xl mx-auto w-full px-5 py-6 flex flex-col gap-6">
-          <section className="bg-white rounded-2xl border border-violet-100 shadow-sm shadow-violet-50/60 overflow-hidden fade-up">
-            <div className="flex items-center justify-between px-5 pt-5 pb-3">
-              <div>
-                <h2 className="font-display font-bold text-gray-900 text-base">Match Requests</h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {matchesLoading ? "Checking for new likes…" : `${pendingRequests.length} people waiting for your response`}
-                </p>
-              </div>
-              <button onClick={() => void loadMatches()} className="text-xs text-violet-600 font-semibold hover:text-violet-800 transition-colors">
-                Refresh
-              </button>
-            </div>
-
-            {requestActionMessage && (
-              <div className="mx-5 mb-3 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-600">
-                {requestActionMessage}
-              </div>
-            )}
-
-            {pendingError && (
-              <div className="mx-5 mb-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
-                {pendingError}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3 px-5 pb-5">
-              {matchesLoading ? (
-                Array.from({ length: 2 }).map((_, index) => (
-                  <div key={index} className="h-24 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
-                ))
-              ) : pendingRequests.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-xs text-gray-400">
-                  <span className="text-2xl mb-1">🌟</span>
-                  No new match requests right now — keep swiping!
-                </div>
-              ) : (
-                pendingRequests.map((request) => (
-                  <PendingRequestCard
-                    key={request.id}
-                    request={request}
-                    busy={requestActionState[request.id] ?? null}
-                    onAccept={() => void handleRequestDecision(request, "accept")}
-                    onDecline={() => void handleRequestDecision(request, "decline")}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="bg-white rounded-2xl border border-violet-100 shadow-sm shadow-violet-50/60 overflow-hidden fade-up">
-            <div className="flex items-center justify-between px-5 pt-5 pb-3">
-              <div>
-                <h2 className="font-display font-bold text-gray-900 text-base">New Matches</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{newMatches.length} people liked you back</p>
-              </div>
-              <button className="text-xs text-violet-600 font-semibold hover:text-violet-800 transition-colors">See all →</button>
-            </div>
-
-            <div className="flex gap-5 px-5 pb-5 overflow-x-auto custom-scroll">
-              {matchesLoading ? (
-                Array.from({ length: 5 }).map((_, index) => (
-                  <div key={index} className="w-[68px] h-[68px] rounded-full bg-violet-50 animate-pulse" />
-                ))
-              ) : newMatches.length === 0 ? (
-                <div className="flex-1 py-8 text-center text-xs text-gray-400">No new matches yet — keep exploring.</div>
-              ) : (
-                newMatches.map((match) => (
-                  <NewMatchBubble
-                    key={match.id}
-                    match={match}
-                    onClick={() => {
-                      void handleSelect(match);
-                    }}
-                    disabled={!match.conversationId && !match.participantId}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-
-          <div className="flex gap-5 items-start">
-            <section
-              className={`bg-white rounded-2xl border border-violet-100 shadow-sm shadow-violet-50/60 overflow-hidden flex flex-col fade-up transition-all duration-300 ${
-                hasActiveConversation ? "w-full lg:w-[420px] flex-shrink-0" : "w-full"
-              }`}
-            >
-              <div className="px-5 pt-5 pb-4 border-b border-violet-50 space-y-3">
-                {matchesError && (
-                  <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600 flex items-center justify-between gap-4">
-                    <span>{matchesError}</span>
-                    <button onClick={() => void loadMatches()} className="text-[11px] font-semibold text-rose-600 underline-offset-2 hover:underline">
-                      Retry
-                    </button>
-                  </div>
-                )}
-
-                <div className="relative">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4">
-                    <circle cx="11" cy="11" r="8" />
-                    <path strokeLinecap="round" d="M21 21l-4.35-4.35" />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Search messages..."
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-violet-50 border border-violet-100 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 transition-all"
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  {(["all", "unread", "online"] as const).map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => setFilter(option)}
-                      className={`px-3.5 py-1.5 rounded-full text-xs font-semibold capitalize transition-all duration-200 ${
-                        filter === option
-                          ? "bg-violet-600 text-white shadow-md shadow-violet-200/50"
-                          : "bg-violet-50 text-gray-500 border border-violet-100 hover:border-violet-200 hover:text-violet-600"
-                      }`}
-                    >
-                      {option === "unread" && totalUnread > 0 ? `Unread (${totalUnread})` : option.charAt(0).toUpperCase() + option.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="divide-y divide-gray-50 overflow-y-auto custom-scroll" style={{ maxHeight: "520px" }}>
-                {matchesLoading ? (
-                  <div className="flex flex-col gap-3 px-5 py-6">
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="h-16 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
-                    ))}
-                  </div>
-                ) : filteredMatches.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-3">
-                    <span className="text-4xl">🔍</span>
-                    <p className="text-sm">No conversations found</p>
-                  </div>
-                ) : (
-                  filteredMatches.map((match, index) => (
-                    <MessageCard
-                      key={match.id}
-                      match={match}
-                      active={selectedMatchId === match.id}
-                      onClick={() => {
-                        void handleSelect(match);
-                      }}
-                      index={index}
-                    />
-                  ))
-                )}
-              </div>
-
-              <div className="border-t border-violet-50 px-5 py-3 flex items-center justify-between">
-                <p className="text-xs text-gray-400">{matchesLoading ? "Loading…" : `${filteredMatches.length} conversations`}</p>
-                <button className="text-xs text-violet-600 font-semibold hover:text-violet-800 transition-colors" onClick={() => setMatches((prev) => prev.map((match) => ({ ...match, unread: 0 })))}>
-                  Mark all read
-                </button>
-              </div>
-            </section>
-
-            {hasActiveConversation && activeMatch && activeConversationId && (
-              <section className="hidden lg:flex flex-col flex-1 bg-white rounded-2xl border border-violet-100 shadow-sm shadow-violet-50/60 overflow-hidden slide-in min-h-0" style={{ minHeight: "520px" }}>
-                <MiniChat
-                  match={activeMatch}
-                  conversationId={activeConversationId}
-                  currentUserId={currentUserId}
-                  onClose={() => {
-                    setSelectedMatchId(null);
-                    setSelectedMatchFallback(null);
-                  }}
-                />
-              </section>
-            )}
-
-            {!hasActiveConversation && (
-              <div className="hidden lg:flex flex-1 bg-white rounded-2xl border border-violet-100 shadow-sm shadow-violet-50/60 items-center justify-center fade-up" style={{ minHeight: "400px" }}>
-                <EmptyState />
-              </div>
-            )}
-          </div>
-
-          <section className="grid grid-cols-3 gap-4 fade-up">
-            {[
-              { label: "Total Matches", value: matches.length.toString(), icon: "💜", color: "from-violet-50 to-white border-violet-100" },
-              { label: "Unread", value: totalUnread.toString(), icon: "✉️", color: "from-violet-50 to-white border-violet-100" },
-              { label: "Online Now", value: onlineCount.toString(), icon: "🟢", color: "from-emerald-50 to-white border-emerald-100" },
-            ].map((stat) => (
-              <div key={stat.label} className={`bg-gradient-to-br ${stat.color} border rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm`}>
-                <span className="text-2xl">{stat.icon}</span>
-                <div>
-                  <p className="font-display font-bold text-gray-900 text-2xl leading-none">{stat.value}</p>
-                  <p className="text-xs text-gray-400 mt-1">{stat.label}</p>
-                </div>
-              </div>
-            ))}
-          </section>
         </div>
 
-        {hasActiveConversation && activeMatch && activeConversationId && (
-          <div className="lg:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t border-violet-100 rounded-t-3xl shadow-2xl shadow-violet-200/40 slide-in" style={{ maxHeight: "70vh" }}>
-            <div className="w-12 h-1 rounded-full bg-gray-200 mx-auto mt-3 mb-1" />
-            <MiniChat
-              match={activeMatch}
-              conversationId={activeConversationId}
-              currentUserId={currentUserId}
-              onClose={() => {
-                setSelectedMatchId(null);
-                setSelectedMatchFallback(null);
-              }}
-            />
+        <div className="flex-1 flex gap-4 overflow-hidden p-4 sm:p-6">
+          <div className={`w-full md:w-96 flex flex-col bg-white rounded-3xl border border-violet-100 shadow-xl overflow-hidden ${hasActiveConversation ? "hidden md:flex" : "flex"}`}>
+            <div className="flex gap-1 p-4 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-white">
+              {([
+                { id: "requests", label: "Requests", count: pendingRequests.length },
+                { id: "new", label: "New", count: filteredNewMatches.length },
+                { id: "chats", label: "Chats", count: filteredMatches.length },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+                    activeTab === tab.id
+                      ? "bg-gradient-to-r from-violet-400 to-violet-900 text-white shadow-lg"
+                      : "text-gray-700 hover:bg-violet-50"
+                  }`}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className="ml-auto bg-white text-black bg-opacity-20 px-2 py-0.5 rounded-full text-xs font-bold">
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {activeTab !== "requests" && (
+              <div className="p-4 border-b border-violet-100">
+                <div className="relative">
+                  <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text--400" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-100 text-gray-500 border border-gray-200 focus:outline-none focus:border-violet-500 focus:bg-white transition-all duration-200"
+                  />
+                </div>
+                {activeTab === "chats" && (
+                  <div className="mt-3 flex gap-2">
+                    {(["all", "unread", "online"] as const).map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => setFilter(option)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
+                          filter === option
+                            ? "bg-violet-600 text-white"
+                            : "bg-violet-50 text-gray-600 hover:bg-violet-100"
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto custom-scroll">
+              {activeTab === "requests" && (
+                <div className="space-y-3 p-4">
+                  {(requestActionMessage || pendingError) && (
+                    <div className="space-y-2">
+                      {requestActionMessage && (
+                        <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-600">
+                          {requestActionMessage}
+                        </div>
+                      )}
+                      {pendingError && (
+                        <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
+                          {pendingError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {matchesLoading ? (
+                    Array.from({ length: 3 }).map((_, index) => (
+                      <div key={index} className="h-28 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
+                    ))
+                  ) : pendingRequests.length > 0 ? (
+                    pendingRequests.map((request, idx) => (
+                      <div key={request.id} style={{ animation: `slideIn 0.4s ease-out ${idx * 0.1}s backwards` }}>
+                        <PendingRequestCard
+                          request={request}
+                          busy={requestActionState[request.id] ?? null}
+                          onAccept={() => void handleRequestDecision(request, "accept")}
+                          onDecline={() => void handleRequestDecision(request, "decline")}
+                        />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12">
+                      <Heart size={32} className="mx-auto text-gray-300 mb-3" />
+                      <p className="text-gray-600 font-medium">No match requests</p>
+                      <button
+                        onClick={() => void loadMatches()}
+                        className="mt-3 text-sm text-violet-600 font-semibold hover:text-violet-700"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "new" && (
+                <div className="space-y-3 p-4">
+                  {matchesLoading ? (
+                    Array.from({ length: 4 }).map((_, index) => (
+                      <div key={index} className="h-20 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
+                    ))
+                  ) : filteredNewMatches.length > 0 ? (
+                    filteredNewMatches.map((match, idx) => (
+                      <div key={match.id} style={{ animation: `slideIn 0.4s ease-out ${idx * 0.1}s backwards` }}>
+                        <NewMatchBubble
+                          match={match}
+                          onClick={() => {
+                            void handleSelect(match);
+                          }}
+                          disabled={!match.conversationId && !match.participantId}
+                        />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12">
+                      <Star size={32} className="mx-auto text-gray-300 mb-3" />
+                      <p className="text-gray-600 font-medium">No new matches</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "chats" && (
+                <div className="space-y-2 p-4">
+                  {matchesError && (
+                    <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600 flex items-center justify-between gap-3">
+                      <span>{matchesError}</span>
+                      <button onClick={() => void loadMatches()} className="font-semibold hover:underline">Retry</button>
+                    </div>
+                  )}
+
+                  {matchesLoading ? (
+                    Array.from({ length: 4 }).map((_, index) => (
+                      <div key={index} className="h-20 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
+                    ))
+                  ) : filteredMatches.length > 0 ? (
+                    filteredMatches.map((chat, idx) => (
+                      <MessageCard
+                        key={chat.id}
+                        match={chat}
+                        active={selectedMatchId === chat.id}
+                        onClick={() => {
+                          void handleSelect(chat);
+                        }}
+                        index={idx}
+                      />
+                    ))
+                  ) : (
+                    <div className="text-center py-12">
+                      <MessageCircle size={32} className="mx-auto text-gray-300 mb-3" />
+                      <p className="text-gray-600 font-medium">No chats yet</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-violet-100 flex items-center justify-between bg-white">
+              <p className="text-xs text-gray-500">Unread: {totalUnread}</p>
+              <button
+                className="text-xs text-violet-600 font-semibold hover:text-violet-700"
+                onClick={() => setMatches((prev) => prev.map((match) => ({ ...match, unread: 0 })))}
+              >
+                Mark all read
+              </button>
+            </div>
           </div>
-        )}
-        {hasActiveConversation && (
-          <div
-            className="lg:hidden fixed inset-0 bg-black/20 z-30"
-            onClick={() => {
-              setSelectedMatchId(null);
-              setSelectedMatchFallback(null);
-            }}
-          />
-        )}
+
+          {hasActiveConversation && activeMatch && activeConversationId ? (
+            <div className="flex-1 bg-white rounded-3xl border border-violet-100 shadow-xl flex flex-col overflow-hidden">
+              <MiniChat
+                match={activeMatch}
+                conversationId={activeConversationId}
+                currentUserId={currentUserId}
+                onClose={() => {
+                  setSelectedMatchId(null);
+                  setSelectedMatchFallback(null);
+                }}
+              />
+            </div>
+          ) : (
+            <EmptyState />
+          )}
+        </div>
       </div>
-    </>
+    </div>
   );
 }
+
+
+
+

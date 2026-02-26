@@ -26,6 +26,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const showSidebar = Boolean(isAuthenticated) && isSidebarPage;
   const showHeader = !isAuthenticated && !isAuthPage;
+  const showLogoutButton = showSidebar && pathname.startsWith("/profile");
 
   const handleLogout = () => {
     clearAuthData();
@@ -39,7 +40,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1">
         {showSidebar && <Navbar />}
         <main className="relative flex-1">
-          {showSidebar && (
+          {showLogoutButton && (
             <button
               type="button"
               onClick={handleLogout}
