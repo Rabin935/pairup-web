@@ -21,13 +21,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isSidebarPage =
     pathname.startsWith("/sidebar") ||
     pathname.startsWith("/profile") ||
-    pathname.startsWith("/user") ||
-    pathname.startsWith("/admin");
+    pathname.startsWith("/user");
 
   const showSidebar = Boolean(isAuthenticated) && isSidebarPage;
   const showHeader = !isAuthenticated && !isAuthPage;
-  const showLogoutButton =
-    showSidebar && (pathname.startsWith("/profile") || pathname.startsWith("/admin"));
+  const showLogoutButton = showSidebar && pathname.startsWith("/profile");
 
   const handleLogout = () => {
     clearAuthData();
