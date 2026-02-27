@@ -6,3 +6,4 @@
 - Iteration 3: refined auth, profile, sidebar, and admin pages.
 - Iteration 4: refined auth, profile, sidebar, and admin pages.
 - Iteration 5: refined auth, profile, sidebar, and admin pages.
+- Iteration 6: refined auth, profile, sidebar, and admin pages.
