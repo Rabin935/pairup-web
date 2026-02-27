@@ -664,7 +664,7 @@ export default function DiscoverPage() {
                     onClick={() => setSelectedUser(null)}
                 >
                     <div
-                        className="relative w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+                        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl"
                         onClick={(event) => event.stopPropagation()}
                     >
                         <button
@@ -677,7 +677,7 @@ export default function DiscoverPage() {
                         <img
                             src={selectedUser.thumbnail}
                             alt={selectedUser.name}
-                            className="h-72 w-full object-cover"
+                            className="h-100 w-full object-cover md:h-[40rem]"
                             onError={(event) => {
                                 event.currentTarget.src = FALLBACK_IMAGE;
                             }}

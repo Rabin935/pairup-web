@@ -306,7 +306,7 @@ export default function CompleteProfileModal({ open, onClose, onSuccess, initial
                             type="text"
                             value={location}
                             onChange={(event) => setLocation(event.target.value)}
-                            placeholder="City, Country"
+                            placeholder="City"
                             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 focus:border-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-100"
                         />
                     </label>

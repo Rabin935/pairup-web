@@ -560,7 +560,7 @@ export default function ProfilePage() {
                                                 event.currentTarget.src = PROFILE_FALLBACK_IMAGE;
                                             }}
                                         />
-                                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center">
                                             <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex gap-4">
                                                 <div className="flex items-center gap-1 text-white font-semibold">
                                                     <Eye size={20} />

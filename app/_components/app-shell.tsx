@@ -26,7 +26,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const showSidebar = Boolean(isAuthenticated) && isSidebarPage;
   const showHeader = !isAuthenticated && !isAuthPage;
-  const showLogoutButton = showSidebar && pathname.startsWith("/profile");
+  const showLogoutButton =
+    showSidebar && (pathname.startsWith("/profile") || pathname.startsWith("/admin"));
 
   const handleLogout = () => {
     clearAuthData();
