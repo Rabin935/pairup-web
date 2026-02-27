@@ -11,7 +11,10 @@ export const registerSchema = z.object({
     firstname: z.string().min(2, { message: "Minimum 2 characters" }),
     lastname: z.string().min(2, { message: "Minimum 2 characters" }),
     email: z.string().email({ message: "Enter a valid email" }),
-    number: z.string().min(10, { message: "Phone number must be 10 characters" }).max(10, { message: "Phone number must be 10 characters" }),
+    countryCode: z.string().regex(/^\+\d{1,4}$/, { message: "Select a valid country code" }).default("+1"),
+    number: z.string().regex(/^\d{6,14}$/, {
+        message: "Phone number must be 6-14 digits",
+    }),
     password: z.string().min(6, { message: "Minimum 6 characters" }),
     confirmPassword: z.string().min(6, { message: "Minimum 6 characters" }),
     authProvider: z.string().default("local"),

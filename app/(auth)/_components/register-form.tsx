@@ -8,6 +8,17 @@ import { useRouter } from 'next/navigation';
 import { RegisterData, registerSchema } from '../schema';
 import { handleRegister } from '@/lib/actions/auth-action';
 
+const COUNTRY_CODES = [
+  { label: 'US (+1)', value: '+1' },
+  { label: 'NP (+977)', value: '+977' },
+  { label: 'IN (+91)', value: '+91' },
+  { label: 'BD (+880)', value: '+880' },
+  { label: 'PK (+92)', value: '+92' },
+  { label: 'GB (+44)', value: '+44' },
+  { label: 'AU (+61)', value: '+61' },
+  { label: 'CA (+1)', value: '+1' },
+];
+
 export default function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +30,7 @@ export default function RegisterForm() {
       firstname: '',
       lastname: '',
       email: '',
+      countryCode: '+1',
       number: '',
       password: '',
       confirmPassword: '',
@@ -29,7 +41,11 @@ export default function RegisterForm() {
     setError(null);
 
     try {
-      const payload = { ...values, authProvider: 'local' };
+      const payload = {
+        ...values,
+        number: `${values.countryCode}${values.number}`,
+        authProvider: 'local',
+      };
       const response = await handleRegister(payload);
 
       if (!response.success) {
@@ -37,9 +53,17 @@ export default function RegisterForm() {
       }
 
       router.push('/login');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Register failed:', err);
-      setError(err?.response?.data?.message || err.message || 'Registration failed');
+      const fallbackMessage = err instanceof Error ? err.message : 'Registration failed';
+      const apiMessage =
+        typeof err === 'object' &&
+        err !== null &&
+        'response' in err &&
+        typeof (err as { response?: { data?: { message?: string } } }).response?.data?.message === 'string'
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : null;
+      setError(apiMessage || fallbackMessage);
     }
   };
 
@@ -107,15 +131,30 @@ export default function RegisterForm() {
           {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
         </div>
 
-        <div className="flex">
-          <span className="flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 bg-gray-100 text-black text-sm">+977</span>
-          <input
-            {...register('number')}
-            placeholder="98XXXXXXXX"
-            className={`w-full px-4 py-3 border rounded-r-lg focus:outline-none focus:ring-1 text-black ${
-              errors.number ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-gray-400'
-            }`}
-          />
+        <div>
+          <div className="flex">
+            <select
+              {...register('countryCode')}
+              className={`rounded-l-lg border border-r-0 px-3 py-3 text-sm text-black focus:outline-none focus:ring-1 ${
+                errors.countryCode ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-gray-400'
+              }`}
+            >
+              {COUNTRY_CODES.map((code) => (
+                <option key={`${code.label}-${code.value}`} value={code.value}>
+                  {code.label}
+                </option>
+              ))}
+            </select>
+            <input
+              {...register('number')}
+              inputMode="numeric"
+              placeholder="Phone number"
+              className={`w-full rounded-r-lg border px-4 py-3 focus:outline-none focus:ring-1 text-black ${
+                errors.number ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-gray-400'
+              }`}
+            />
+          </div>
+          {errors.countryCode && <p className="text-red-500 text-xs mt-1">{errors.countryCode.message}</p>}
           {errors.number && <p className="text-red-500 text-xs mt-1">{errors.number.message}</p>}
         </div>
 
