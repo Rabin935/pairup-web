@@ -11,3 +11,4 @@
 - Iteration 8: refined auth, profile, sidebar, and admin pages.
 - Iteration 9: refined auth, profile, sidebar, and admin pages.
 - Iteration 10: refined auth, profile, sidebar, and admin pages.
+- Iteration 11: refined auth, profile, sidebar, and admin pages.
