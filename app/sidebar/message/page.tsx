@@ -1349,7 +1349,6 @@ export default function MessagesPage() {
   const handleTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
     swipeStartXRef.current = event.touches[0]?.clientX ?? null;
   }, []);
-
   const handleTouchEnd = useCallback(
     (event: TouchEvent<HTMLDivElement>) => {
       const startX = swipeStartXRef.current;
