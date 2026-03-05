@@ -49,23 +49,23 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             />
 
             <aside
-                className={`absolute left-0 top-0 flex h-full w-72 flex-col bg-white shadow-2xl transition-transform duration-300 ease-out ${
+                className={`absolute left-0 top-0 flex h-full w-72 flex-col bg-white shadow-2xl transition-transform duration-300 ease-out dark:bg-slate-950 ${
                     isOpen ? "translate-x-0" : "-translate-x-full"
                 }`}
                 role="dialog"
                 aria-modal="true"
                 aria-label="Navigation Menu"
             >
-                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5 dark:border-slate-800">
                     <div>
-                        <p className="text-xs uppercase tracking-[0.3em] text-slate-400">PairUp</p>
-                        <p className="text-lg font-semibold text-slate-900">Menu</p>
+                        <p className="text-xs uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">PairUp</p>
+                        <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">Menu</p>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
                         aria-label="Close sidebar"
-                        className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                        className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                     >
                         <svg
                             width="16"
@@ -92,8 +92,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                                 onClick={onClose}
                                 className={`flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                                     isActive
-                                        ? "bg-slate-900 text-white shadow-lg shadow-slate-400/30"
-                                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                        ? "bg-slate-900 text-white shadow-lg shadow-slate-400/30 dark:bg-slate-800 dark:shadow-black/30"
+                                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-100"
                                 }`}
                             >
                                 <span>{item.label}</span>
@@ -103,11 +103,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     })}
                 </nav>
 
-                <div className="border-t border-slate-100 px-6 py-5">
+                <div className="border-t border-slate-100 px-6 py-5 dark:border-slate-800">
                     <button
                         type="button"
                         onClick={handleLogout}
-                        className="flex w-full items-center justify-between rounded-full bg-rose-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-200 transition hover:bg-rose-600"
+                        className="flex w-full items-center justify-between rounded-full bg-rose-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-200 transition hover:bg-rose-600 dark:bg-rose-600 dark:hover:bg-rose-500"
                     >
                         <span>Logout</span>
                         <span className="text-xs uppercase tracking-wide text-white/70">Exit</span>

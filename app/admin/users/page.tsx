@@ -1,246 +1,399 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useAdminGuard } from '@/lib/hooks/useAdminGuard';
-import apiClient from '@/lib/api';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { adminFetch } from "../_lib/admin-api";
 
-interface User {
-  id: string;
-  firstname: string;
-  lastname: string;
-  email: string;
-  role: 'user' | 'admin';
-}
+type AdminUser = {
+  _id?: string;
+  id?: string;
+  firstname?: string;
+  lastname?: string;
+  email?: string;
+  role?: string;
+  gender?: string;
+  location?: string;
+  isBanned?: boolean;
+  banReason?: string;
+  reportCount?: number;
+};
 
-const PAGE_SIZE = 5;
+type Pagination = {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+type UsersResponse = {
+  success: boolean;
+  data: AdminUser[];
+  pagination: Pagination;
+};
+
+const PAGE_SIZE = 10;
+const AUTO_BAN_REASON = "Auto-banned due to excessive reports";
+
+const getUserId = (user: AdminUser): string => user._id || user.id || "";
 
 export default function AdminUsersPage() {
-  // All hooks FIRST - in same order every render
-  const { isAdmin, loading: authLoading } = useAdminGuard();
-  const [users, setUsers] = useState<User[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [genderFilter, setGenderFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [locations, setLocations] = useState<string[]>([]);
+  const [actionUserId, setActionUserId] = useState<string>("");
 
-  const fetchUsers = useCallback(async (page: number) => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      setError('');
-      const response = await apiClient.get('/api/admin/users', {
-        params: { page, limit: PAGE_SIZE },
+      setError("");
+
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
       });
 
-      const payload = response.data?.data ?? response.data;
-      const listCandidate = Array.isArray(payload)
-        ? payload
-        : payload?.users ?? payload?.data ?? [];
-      const rawUsers = Array.isArray(listCandidate)
-        ? listCandidate
-        : Array.isArray(listCandidate?.data)
-        ? listCandidate.data
-        : [];
+      if (searchQuery) params.append("search", searchQuery);
+      if (genderFilter) params.append("gender", genderFilter);
+      if (locationFilter) params.append("location", locationFilter);
 
-      const normalizedUsers: User[] = rawUsers.map((user: any) => ({
-        id: user.id || user._id || user.uid,
-        firstname: user.firstname ?? '',
-        lastname: user.lastname ?? '',
-        email: user.email ?? '',
-        role: user.role ?? 'user',
-      }));
+      const response = await adminFetch<UsersResponse>(`/api/admin/users?${params.toString()}`);
+      const nextUsers = Array.isArray(response.data) ? response.data : [];
+      const nextPagination = response.pagination || {
+        total: nextUsers.length,
+        page,
+        limit: PAGE_SIZE,
+        totalPages: 1,
+      };
 
-      setUsers(normalizedUsers);
-      const pagination = response.data?.pagination ?? payload?.pagination;
-      setTotalPages(pagination?.totalPages ?? payload?.totalPages ?? 1);
-    } catch (err: any) {
-      const message = err.response?.data?.message || 'Failed to fetch users';
+      setUsers(nextUsers);
+      setTotalUsers(nextPagination.total);
+      setTotalPages(Math.max(nextPagination.totalPages || 1, 1));
+      setLocations((prev) => {
+        const merged = new Set(prev);
+        nextUsers.forEach((user) => {
+          if (user.location && user.location.trim()) {
+            merged.add(user.location.trim());
+          }
+        });
+        if (locationFilter) merged.add(locationFilter);
+        return Array.from(merged).sort((a, b) => a.localeCompare(b));
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load users";
       setError(message);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [genderFilter, locationFilter, page, searchQuery]);
 
   useEffect(() => {
-    fetchUsers(currentPage);
-  }, [currentPage, fetchUsers]);
+    fetchUsers();
+  }, [fetchUsers]);
 
-  const handleDelete = async (userId: string) => {
-    const confirmed = window.confirm('Delete this user? This action cannot be undone.');
-    if (!confirmed) return;
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPage(1);
+    setSearchQuery(searchInput.trim());
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput("");
+    setSearchQuery("");
+    setPage(1);
+  };
+
+  const handleGenderChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setGenderFilter(event.target.value);
+    setPage(1);
+  };
+
+  const handleLocationChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setLocationFilter(event.target.value);
+    setPage(1);
+  };
+
+  const handleBanToggle = async (user: AdminUser) => {
+    const userId = getUserId(user);
+    if (!userId) return;
 
     try {
-      setDeletingId(userId);
-      await apiClient.delete(`/api/admin/users/${userId}`);
-      await fetchUsers(currentPage);
-    } catch (err: any) {
-      const message = err.response?.data?.message || 'Failed to delete user';
+      setActionUserId(userId);
+      setError("");
+
+      const endpoint = user.isBanned ? "unban" : "ban";
+      await adminFetch(`/api/admin/users/${userId}/${endpoint}`, {
+        method: "PATCH",
+      });
+
+      await fetchUsers();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update user status";
       setError(message);
     } finally {
-      setDeletingId(null);
+      setActionUserId("");
     }
   };
 
-  const goToPrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage((prev) => prev - 1);
-    }
-  };
+  const handleDelete = async (user: AdminUser) => {
+    const userId = getUserId(user);
+    if (!userId) return;
 
-  const goToNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage((prev) => prev + 1);
-    }
-  };
-
-  // Conditional renders AFTER all hooks
-  if (authLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
+    const shouldDelete = window.confirm(
+      "Delete this user and related likes, matches, and messages? This action cannot be undone."
     );
-  }
+    if (!shouldDelete) return;
 
-  if (!isAdmin) return null;
+    try {
+      setActionUserId(userId);
+      setError("");
+      await adminFetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+
+      if (users.length === 1 && page > 1) {
+        setPage((current) => Math.max(current - 1, 1));
+      } else {
+        await fetchUsers();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete user";
+      setError(message);
+    } finally {
+      setActionUserId("");
+    }
+  };
+
+  const pageLabel = useMemo(
+    () => `Page ${page} of ${Math.max(totalPages, 1)} - ${totalUsers.toLocaleString()} users`,
+    [page, totalPages, totalUsers]
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <p className="text-sm uppercase tracking-wide text-gray-500">Admin</p>
-              <h1 className="text-3xl font-semibold text-gray-900">Users</h1>
-            </div>
-            <Link
-              href="/admin/users/create"
-              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
-            >
-              + New User
-            </Link>
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <form className="grid gap-3 md:grid-cols-12" onSubmit={handleSearchSubmit}>
+          <div className="md:col-span-6">
+            <label htmlFor="user-search" className="mb-1 block text-xs font-semibold uppercase text-slate-500">
+              Search
+            </label>
+            <input
+              id="user-search"
+              type="text"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search by first name, last name, or email"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-rose-200 transition focus:border-rose-400 focus:ring-2"
+            />
           </div>
 
-          {error && (
-            <div className="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+          <div className="md:col-span-3">
+            <label htmlFor="gender-filter" className="mb-1 block text-xs font-semibold uppercase text-slate-500">
+              Gender
+            </label>
+            <select
+              id="gender-filter"
+              value={genderFilter}
+              onChange={handleGenderChange}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-rose-200 transition focus:border-rose-400 focus:ring-2"
+            >
+              <option value="">All genders</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
 
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      First Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Last Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Role
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-500">
-                        Loading users...
+          <div className="md:col-span-3">
+            <label htmlFor="location-filter" className="mb-1 block text-xs font-semibold uppercase text-slate-500">
+              Location
+            </label>
+            <select
+              id="location-filter"
+              value={locationFilter}
+              onChange={handleLocationChange}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-rose-200 transition focus:border-rose-400 focus:ring-2"
+            >
+              <option value="">All locations</option>
+              {locations.map((location) => (
+                <option key={location} value={location}>
+                  {location}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="md:col-span-12 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700"
+            >
+              Search
+            </button>
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              Clear
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  User
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Gender
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Location
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Reports
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
+                    Loading users...
+                  </td>
+                </tr>
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
+                    No users found.
+                  </td>
+                </tr>
+              ) : (
+                users.map((user) => {
+                  const userId = getUserId(user);
+                  const fullName = `${user.firstname || ""} ${user.lastname || ""}`.trim() || "Unnamed user";
+                  const isBusy = actionUserId === userId;
+                  const reportCount = Number(user.reportCount || 0);
+                  const hasHighReports = reportCount >= 3;
+                  const isAutoBanned = user.isBanned && user.banReason === AUTO_BAN_REASON;
+                  const rowClass = user.isBanned
+                    ? "bg-red-50 hover:bg-red-100"
+                    : hasHighReports
+                    ? "bg-amber-50 hover:bg-amber-100"
+                    : "hover:bg-slate-50";
+
+                  return (
+                    <tr key={userId || fullName} className={rowClass}>
+                      <td className="px-4 py-3">
+                        <p
+                          className={`text-sm font-semibold ${
+                            user.isBanned ? "text-red-800" : "text-slate-900"
+                          }`}
+                        >
+                          {fullName}
+                        </p>
+                        <p className="text-sm text-slate-600">{user.email || "-"}</p>
                       </td>
-                    </tr>
-                  ) : users.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-500">
-                        No users found.
+                      <td className="px-4 py-3 text-sm text-slate-700">{user.gender || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{user.location || "-"}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            hasHighReports
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {reportCount}
+                        </span>
                       </td>
-                    </tr>
-                  ) : (
-                    users.map((user) => (
-                      <tr key={user.id} className="hover:bg-gray-50">
-                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                          {user.firstname || '—'}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                          {user.lastname || '—'}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                          {user.email}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4">
-                          <span
-                            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                              user.role === 'admin'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-blue-100 text-blue-800'
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            user.isBanned ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
+                          {user.isBanned ? "Banned" : "Active"}
+                        </span>
+                        {isAutoBanned && (
+                          <span className="ml-2 inline-flex rounded-full bg-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-800">
+                            Auto-banned
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleBanToggle(user)}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                              user.isBanned ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"
                             }`}
                           >
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                          <div className="flex items-center justify-end gap-3">
-                            <Link
-                              href={`/admin/users/${user.id}`}
-                              className="text-blue-600 transition hover:text-blue-800"
-                            >
-                              View
-                            </Link>
-                            <Link
-                              href={`/admin/users/${user.id}/edit`}
-                              className="text-emerald-600 transition hover:text-emerald-800"
-                            >
-                              Edit
-                            </Link>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(user.id)}
-                              disabled={deletingId === user.id}
-                              className="text-red-600 transition hover:text-red-800 disabled:cursor-not-allowed disabled:text-red-400"
-                            >
-                              {deletingId === user.id ? 'Deleting…' : 'Delete'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            {user.isBanned ? "Unban" : "Ban"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => handleDelete(user)}
+                            className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-            <div className="flex flex-col items-center gap-3 border-t border-gray-200 px-6 py-4 sm:flex-row sm:justify-between">
-              <p className="text-sm text-gray-600">
-                Page {currentPage} of {totalPages}
-              </p>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={goToPrevPage}
-                  disabled={currentPage === 1 || loading}
-                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"
-                >
-                  Prev
-                </button>
-                <button
-                  type="button"
-                  onClick={goToNextPage}
-                  disabled={currentPage === totalPages || loading}
-                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+          <p className="text-sm text-slate-600">{pageLabel}</p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={loading || page <= 1}
+              onClick={() => setPage((current) => Math.max(current - 1, 1))}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={loading || page >= totalPages}
+              onClick={() => setPage((current) => current + 1)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
           </div>
         </div>
-      </div>
+      </section>
+    </div>
   );
 }
+

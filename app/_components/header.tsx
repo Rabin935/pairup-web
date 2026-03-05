@@ -42,19 +42,13 @@ export default function Header({ onMenuToggle }: HeaderProps) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const handleGetStarted = () => {
-    window.location.href = "/login";
-    };
-
-    
-
     return (
         <>
             <nav
-        className={`sticky top-0 z-40 w-full border-b border-white/40 bg-white px-4 py-3 backdrop-blur-md ${
+        className={`sticky top-0 z-40 w-full border-b border-slate-200/70 bg-white/80 px-4 py-3 backdrop-blur-md transition-colors dark:border-slate-800/70 dark:bg-slate-950/70 ${
           scrolled
-            ? "bg-white/90 backdrop-blur-xl shadow-sm border-b border-violet-100"
-            : "bg-transparent"
+            ? "bg-white/90 backdrop-blur-xl shadow-sm border-slate-200 dark:bg-slate-950/90 dark:border-slate-800"
+            : "bg-transparent dark:bg-transparent"
         }`}
       >
 
@@ -69,15 +63,15 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                 <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z"/>
               </svg>
             </div>
-            <span className="font-display font-bold text-xl text-gray-900">PairUp</span>
+            <span className="font-display font-bold text-xl text-gray-900 dark:text-white">PairUp</span>
           </div>
                 
 
                  {/* Nav links */}
-          <div className="hidden md:flex items-center gap-8 text-sm text-gray-500 font-medium">
-            <a href="#features" className="hover:text-violet-600 transition-colors">Features</a>
-            <a href="#how" className="hover:text-violet-600 transition-colors">How it works</a>
-            <a href="#stats" className="hover:text-violet-600 transition-colors">About</a>
+          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-500 dark:text-slate-300">
+            <a href="#features" className="hover:text-violet-600 transition-colors dark:hover:text-violet-300">Features</a>
+            <a href="#how" className="hover:text-violet-600 transition-colors dark:hover:text-violet-300">How it works</a>
+            <a href="#stats" className="hover:text-violet-600 transition-colors dark:hover:text-violet-300">About</a>
           </div>
 
                 
@@ -88,13 +82,13 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                             type="button"
                             aria-label="Open menu"
                             onClick={handleSidebarOpen}
-                            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-600 shadow-sm transition hover:border-rose-200 hover:text-rose-500 md:hidden"
+                            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:text-rose-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-rose-400 md:hidden"
                         >
                             ☰
                         </button>
                         <Link
                             href="/login"
-                            className="text-sm font-semibold px-5 py-2.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-700 hover:bg-violet-600 hover:text-white hover:border-violet-600 hover:shadow-lg hover:shadow-violet-200 transition-all duration-300"
+                            className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-2.5 text-sm font-semibold text-violet-700 transition-all duration-300 hover:border-violet-600 hover:bg-violet-600 hover:text-white hover:shadow-lg hover:shadow-violet-200 dark:border-violet-700 dark:bg-violet-900/30 dark:text-violet-200 dark:hover:bg-violet-600 dark:hover:text-white"
                         >
                             Sign in
                         </Link>
@@ -106,7 +100,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                             type="button"
                             aria-label="Toggle menu"
                             onClick={handleSidebarOpen}
-                            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-600 shadow-sm transition hover:border-rose-200 hover:text-rose-500"
+                            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-xl text-slate-600 shadow-sm transition-colors hover:border-rose-200 hover:text-rose-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-rose-400"
                         >
                             ☰
                         </button>
@@ -126,7 +120,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                         <button
                             type="button"
                             onClick={logout}
-                            className="text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-600"
+                            className="text-xs font-medium text-slate-400 underline-offset-2 hover:text-slate-600 dark:text-slate-300 dark:hover:text-slate-100"
                         >
                             Logout
                         </button>

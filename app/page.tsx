@@ -9,7 +9,7 @@ export default function Page() {
 
   useEffect(() => {
     if (getAuthData()) {
-      router.replace("/sidebar/home");
+      router.replace("/sidebar/discover");
       return;
     }
 

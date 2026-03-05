@@ -514,18 +514,18 @@ export default function DiscoverPage() {
             return (
                 <div className="flex flex-col items-center gap-4">
                     <Loader2 className="h-8 w-8 animate-spin text-rose-500" />
-                    <p className="text-sm text-slate-500">Loading curated matches…</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Loading curated matches...</p>
                 </div>
             );
         }
 
         if (error) {
             return (
-                <div className="rounded-3xl border border-rose-200 bg-rose-50 p-8 text-center">
-                    <p className="text-base font-semibold text-rose-700">{error}</p>
+                <div className="rounded-3xl border border-rose-200 bg-rose-50 p-8 text-center dark:border-rose-900/50 dark:bg-rose-950/30">
+                    <p className="text-base font-semibold text-rose-700 dark:text-rose-200">{error}</p>
                     <button
                         onClick={() => void loadUsers()}
-                        className="mt-4 inline-flex items-center justify-center rounded-full bg-rose-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
+                        className="mt-4 inline-flex items-center justify-center rounded-full bg-rose-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400"
                     >
                         Retry
                     </button>
@@ -535,14 +535,14 @@ export default function DiscoverPage() {
 
         if (profileGateMessage) {
             return (
-                <div className="rounded-3xl border border-amber-300 bg-amber-50 p-8 text-center">
-                    <p className="text-base font-semibold text-amber-800">{profileGateMessage}</p>
-                    <p className="mt-2 text-sm text-amber-700">
+                <div className="rounded-3xl border border-amber-300 bg-amber-50 p-8 text-center dark:border-amber-900/50 dark:bg-amber-950/30">
+                    <p className="text-base font-semibold text-amber-800 dark:text-amber-200">{profileGateMessage}</p>
+                    <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
                         You must complete your profile before accessing Discover.
                     </p>
                     <button
                         onClick={() => setIsProfileModalOpen(true)}
-                        className="mt-4 inline-flex items-center justify-center rounded-full bg-amber-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700"
+                        className="mt-4 inline-flex items-center justify-center rounded-full bg-amber-600 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-400"
                     >
                         Complete Profile
                     </button>
@@ -552,9 +552,9 @@ export default function DiscoverPage() {
 
         if (!users.length) {
             return (
-                <div className="rounded-3xl border border-dashed border-slate-300 bg-white/80 p-10 text-center shadow-sm">
-                    <p className="text-xl font-semibold text-slate-900">No more users in your deck.</p>
-                    <p className="mt-2 text-sm text-slate-500">
+                <div className="rounded-3xl border border-dashed border-slate-300 bg-white/80 p-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+                    <p className="text-xl font-semibold text-slate-900 dark:text-slate-100">No more users in your deck.</p>
+                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                         You&apos;ve swiped through everyone for now. Check back later for new profiles.
                     </p>
                     <button
@@ -562,11 +562,11 @@ export default function DiscoverPage() {
                         disabled={reloadPending || loading}
                         className={`mt-6 inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-white shadow-lg transition ${
                             reloadPending || loading
-                                ? "bg-slate-400 cursor-wait"
-                                : "bg-slate-900 hover:bg-slate-800"
+                                ? "bg-slate-400 cursor-wait dark:bg-slate-700"
+                                : "bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
                         }`}
                     >
-                        {reloadPending || loading ? "Reloading…" : "Reload deck"}
+                        {reloadPending || loading ? "Reloading..." : "Reload deck"}
                     </button>
                 </div>
             );
@@ -631,10 +631,10 @@ export default function DiscoverPage() {
                 })}
                 </div>
                 {swipeError ? (
-                    <p className="text-sm text-rose-500 text-center max-w-md">{swipeError}</p>
+                    <p className="max-w-md text-center text-sm text-rose-500 dark:text-rose-300">{swipeError}</p>
                 ) : null}
                 {!swipeError && inviteNotice ? (
-                    <p className="text-sm text-emerald-600 text-center max-w-md">{inviteNotice}</p>
+                    <p className="max-w-md text-center text-sm text-emerald-600 dark:text-emerald-300">{inviteNotice}</p>
                 ) : null}
             </div>
         );
@@ -642,15 +642,12 @@ export default function DiscoverPage() {
 
     return (
         <ProtectedRoute requiredRole="user">
-            <div className="min-h-screen bg-gradient-to-b from-rose-50 via-white to-slate-50 px-6 py-10">
+            <div className="min-h-screen bg-gradient-to-b from-rose-50 via-white to-slate-50 px-6 py-10 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
                 <div className="mx-auto max-w-3xl space-y-10">
-                    <header className="text-center">
-                        <p className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.5em] text-rose-400">
-                            <Sparkles className="h-4 w-4" /> Discover
-                        </p>
-                        <h1 className="mt-4 text-4xl font-semibold text-slate-900">Swipe your next connection</h1>
-                        <p className="mt-3 text-sm text-slate-500">
-                            Swipe right to send an invitation, left to skip. The deck refreshes automatically as you meet new people.
+                    <header>
+                        <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Discover</h1>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                            Swipe right to send an invitation, left to skip.
                         </p>
                     </header>
 
@@ -664,13 +661,13 @@ export default function DiscoverPage() {
                     onClick={() => setSelectedUser(null)}
                 >
                     <div
-                        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white shadow-2xl"
+                        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-slate-900"
                         onClick={(event) => event.stopPropagation()}
                     >
                         <button
                             type="button"
                             onClick={() => setSelectedUser(null)}
-                            className="absolute right-4 top-4 z-10 rounded-full bg-white/90 p-2 text-slate-700 shadow"
+                            className="absolute right-4 top-4 z-10 rounded-full bg-white/90 p-2 text-slate-700 shadow dark:bg-slate-800 dark:text-slate-200"
                         >
                             <X size={18} />
                         </button>
@@ -683,17 +680,17 @@ export default function DiscoverPage() {
                             }}
                         />
                         <div className="space-y-4 p-6">
-                            <h3 className="text-2xl font-bold text-slate-900">
+                            <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                                 {selectedUser.name}
                                 {selectedUser.age ? `, ${selectedUser.age}` : ""}
                             </h3>
                             {selectedUser.location && (
-                                <p className="flex items-center gap-2 text-sm text-slate-600">
+                                <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                                     <MapPin size={16} className="text-rose-500" />
                                     {selectedUser.location}
                                 </p>
                             )}
-                            {selectedUser.bio && <p className="text-sm text-slate-700">{selectedUser.bio}</p>}
+                            {selectedUser.bio && <p className="text-sm text-slate-700 dark:text-slate-200">{selectedUser.bio}</p>}
                             {selectedUser.interests.length > 0 && (
                                 <div className="flex flex-wrap gap-2">
                                     {selectedUser.interests.map((interest) => (
