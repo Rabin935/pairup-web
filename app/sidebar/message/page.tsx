@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type TouchEvent,
+  type WheelEvent,
+} from "react";
 import {
   ArrowLeft,
   Flame,
@@ -54,6 +64,8 @@ interface ChatMessage {
   clientMessageId?: string;
   status?: "pending" | "sent";
 }
+
+type MessageTab = "requests" | "new" | "chats";
 
 const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ??
@@ -1312,12 +1324,62 @@ export default function MessagesPage() {
   const [pendingError, setPendingError] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [selectedMatchFallback, setSelectedMatchFallback] = useState<Match | null>(null);
-  const [activeTab, setActiveTab] = useState<"requests" | "new" | "chats">("chats");
+  const [activeTab, setActiveTab] = useState<MessageTab>("chats");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "online">("all");
   const [requestActionState, setRequestActionState] = useState<Record<string, "accept" | "decline" | null>>({});
   const [requestActionMessage, setRequestActionMessage] = useState<string | null>(null);
   const realtimeSocketRef = useRef<Socket | null>(null);
+  const swipeStartXRef = useRef<number | null>(null);
+
+  const tabOrder = useMemo<MessageTab[]>(() => ["requests", "new", "chats"], []);
+  const activeTabIndex = tabOrder.indexOf(activeTab);
+
+  const moveToTabByOffset = useCallback(
+    (offset: number) => {
+      const nextIndex = Math.max(0, Math.min(tabOrder.length - 1, activeTabIndex + offset));
+      const nextTab = tabOrder[nextIndex];
+      if (nextTab && nextTab !== activeTab) {
+        setActiveTab(nextTab);
+      }
+    },
+    [activeTab, activeTabIndex, tabOrder]
+  );
+
+  const handleTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    swipeStartXRef.current = event.touches[0]?.clientX ?? null;
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (event: TouchEvent<HTMLDivElement>) => {
+      const startX = swipeStartXRef.current;
+      const endX = event.changedTouches[0]?.clientX;
+      swipeStartXRef.current = null;
+      if (startX === null || typeof endX !== "number") return;
+
+      const deltaX = endX - startX;
+      if (Math.abs(deltaX) < 45) return;
+
+      if (deltaX < 0) {
+        moveToTabByOffset(1);
+      } else {
+        moveToTabByOffset(-1);
+      }
+    },
+    [moveToTabByOffset]
+  );
+
+  const handleWheelSlide = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      if (Math.abs(event.deltaX) < 30) return;
+      if (event.deltaX > 0) {
+        moveToTabByOffset(1);
+      } else {
+        moveToTabByOffset(-1);
+      }
+    },
+    [moveToTabByOffset]
+  );
 
   const applyRecentMessageToLists = useCallback(
     (message: ChatMessage) => {
@@ -1908,114 +1970,124 @@ export default function MessagesPage() {
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto custom-scroll">
-              {activeTab === "requests" && (
-                <div className="space-y-3 p-4">
-                  {(requestActionMessage || pendingError) && (
-                    <div className="space-y-2">
-                      {requestActionMessage && (
-                        <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-600">
-                          {requestActionMessage}
-                        </div>
-                      )}
-                      {pendingError && (
-                        <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
-                          {pendingError}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {matchesLoading ? (
-                    Array.from({ length: 3 }).map((_, index) => (
-                      <div key={index} className="h-28 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
-                    ))
-                  ) : pendingRequests.length > 0 ? (
-                    pendingRequests.map((request, idx) => (
-                      <div key={request.id} style={{ animation: `slideIn 0.4s ease-out ${idx * 0.1}s backwards` }}>
-                        <PendingRequestCard
-                          request={request}
-                          busy={requestActionState[request.id] ?? null}
-                          onAccept={() => void handleRequestDecision(request, "accept")}
-                          onDecline={() => void handleRequestDecision(request, "decline")}
-                        />
+            <div
+              className="flex-1 overflow-hidden"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              onWheel={handleWheelSlide}
+            >
+              <div
+                className="h-full w-[300%] grid grid-cols-3 transition-transform duration-300 ease-out"
+                style={{ transform: `translateX(-${activeTabIndex * (100 / 3)}%)` }}
+              >
+                <div className="overflow-y-auto custom-scroll">
+                  <div className="space-y-3 p-4">
+                    {(requestActionMessage || pendingError) && (
+                      <div className="space-y-2">
+                        {requestActionMessage && (
+                          <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-600">
+                            {requestActionMessage}
+                          </div>
+                        )}
+                        {pendingError && (
+                          <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600">
+                            {pendingError}
+                          </div>
+                        )}
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-12">
-                      <Heart size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
-                      <p className="text-gray-600 dark:text-slate-400 font-medium">No match requests</p>
-                      <button
-                        onClick={() => void loadMatches()}
-                        className="mt-3 text-sm text-violet-600 font-semibold hover:text-violet-700"
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
 
-              {activeTab === "new" && (
-                <div className="space-y-3 p-4">
-                  {matchesLoading ? (
-                    Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="h-20 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
-                    ))
-                  ) : filteredNewMatches.length > 0 ? (
-                    filteredNewMatches.map((match, idx) => (
-                      <div key={match.id} style={{ animation: `slideIn 0.4s ease-out ${idx * 0.1}s backwards` }}>
-                        <NewMatchBubble
-                          match={match}
+                    {matchesLoading ? (
+                      Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="h-28 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
+                      ))
+                    ) : pendingRequests.length > 0 ? (
+                      pendingRequests.map((request, idx) => (
+                        <div key={request.id} style={{ animation: `slideIn 0.4s ease-out ${idx * 0.1}s backwards` }}>
+                          <PendingRequestCard
+                            request={request}
+                            busy={requestActionState[request.id] ?? null}
+                            onAccept={() => void handleRequestDecision(request, "accept")}
+                            onDecline={() => void handleRequestDecision(request, "decline")}
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-12">
+                        <Heart size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
+                        <p className="text-gray-600 dark:text-slate-400 font-medium">No like or match requests</p>
+                        <button
+                          onClick={() => void loadMatches()}
+                          className="mt-3 text-sm text-violet-600 font-semibold hover:text-violet-700"
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto custom-scroll">
+                  <div className="space-y-3 p-4">
+                    {matchesLoading ? (
+                      Array.from({ length: 4 }).map((_, index) => (
+                        <div key={index} className="h-20 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
+                      ))
+                    ) : filteredNewMatches.length > 0 ? (
+                      filteredNewMatches.map((match, idx) => (
+                        <div key={match.id} style={{ animation: `slideIn 0.4s ease-out ${idx * 0.1}s backwards` }}>
+                          <NewMatchBubble
+                            match={match}
+                            onClick={() => {
+                              void handleSelect(match);
+                            }}
+                            disabled={!match.conversationId && !match.participantId}
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-12">
+                        <Star size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
+                        <p className="text-gray-600 dark:text-slate-400 font-medium">No new connections</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto custom-scroll">
+                  <div className="space-y-2 p-4">
+                    {matchesError && (
+                      <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600 flex items-center justify-between gap-3">
+                        <span>{matchesError}</span>
+                        <button onClick={() => void loadMatches()} className="font-semibold hover:underline">Retry</button>
+                      </div>
+                    )}
+
+                    {matchesLoading ? (
+                      Array.from({ length: 4 }).map((_, index) => (
+                        <div key={index} className="h-20 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
+                      ))
+                    ) : filteredMatches.length > 0 ? (
+                      filteredMatches.map((chat, idx) => (
+                        <MessageCard
+                          key={chat.id}
+                          match={chat}
+                          active={selectedMatchId === chat.id}
                           onClick={() => {
-                            void handleSelect(match);
+                            void handleSelect(chat);
                           }}
-                          disabled={!match.conversationId && !match.participantId}
+                          index={idx}
                         />
+                      ))
+                    ) : (
+                      <div className="text-center py-12">
+                        <MessageCircle size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
+                        <p className="text-gray-600 dark:text-slate-400 font-medium">No chats yet</p>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-12">
-                      <Star size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
-                      <p className="text-gray-600 dark:text-slate-400 font-medium">No new matches</p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              )}
-
-              {activeTab === "chats" && (
-                <div className="space-y-2 p-4">
-                  {matchesError && (
-                    <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600 flex items-center justify-between gap-3">
-                      <span>{matchesError}</span>
-                      <button onClick={() => void loadMatches()} className="font-semibold hover:underline">Retry</button>
-                    </div>
-                  )}
-
-                  {matchesLoading ? (
-                    Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="h-20 rounded-2xl bg-gradient-to-r from-violet-50 to-white animate-pulse" />
-                    ))
-                  ) : filteredMatches.length > 0 ? (
-                    filteredMatches.map((chat, idx) => (
-                      <MessageCard
-                        key={chat.id}
-                        match={chat}
-                        active={selectedMatchId === chat.id}
-                        onClick={() => {
-                          void handleSelect(chat);
-                        }}
-                        index={idx}
-                      />
-                    ))
-                  ) : (
-                    <div className="text-center py-12">
-                      <MessageCircle size={32} className="mx-auto text-gray-300 dark:text-slate-600 mb-3" />
-                      <p className="text-gray-600 dark:text-slate-400 font-medium">No chats yet</p>
-                    </div>
-                  )}
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="px-4 py-3 border-t border-violet-100 flex items-center justify-between bg-white dark:border-slate-800 dark:bg-slate-900">

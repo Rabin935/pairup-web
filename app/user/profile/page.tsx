@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import AuthGuard from '@/components/AuthGuard';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { getAuthData, clearAuthData, UserInfo } from '@/lib/auth-utils';
 import { authAPI } from '@/lib/api';
 
@@ -94,16 +94,16 @@ export default function UserProfilePage() {
 
   if (!user) {
     return (
-      <AuthGuard>
+      <ProtectedRoute>
         <div className="flex items-center justify-center min-h-screen">
           <p className="text-gray-600">Loading...</p>
         </div>
-      </AuthGuard>
+      </ProtectedRoute>
     );
   }
 
   return (
-    <AuthGuard>
+    <ProtectedRoute>
       <div className="min-h-screen bg-gray-50 py-12 px-4">
         <div className="max-w-2xl mx-auto">
           <div className="bg-white rounded-lg shadow-md p-8">
@@ -225,6 +225,6 @@ export default function UserProfilePage() {
           </div>
         </div>
       </div>
-    </AuthGuard>
+    </ProtectedRoute>
   );
 }
