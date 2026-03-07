@@ -64,11 +64,13 @@ export default function LoginForm() {
 
     return (
         <div className="flex flex-col items-center w-full">
-            <div className="text-[#8B5CF6] font-bold text-[1.7rem]">
-                PairUp
-            </div>
+            <img
+                src="https://res.cloudinary.com/dtndr0wru/image/upload/v1772865595/pairuplogo_uhkfg9.png"
+                alt="PairUp logo"
+                className="mb-2 h-16 w-16 rounded-xl object-cover"
+            />
 
-            <h1 className="text-3xl font-bold text-black mb-8">Login to GiftQuest</h1>
+            <h1 className="text-3xl font-bold text-black mb-8">Login to PairUp</h1>
 
             {submitError && (
                 <div className="w-full mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">

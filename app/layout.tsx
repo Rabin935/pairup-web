@@ -15,9 +15,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const PROJECT_LOGO_URL =
+  "https://res.cloudinary.com/dtndr0wru/image/upload/v1772865595/pairuplogo_uhkfg9.png";
+
 export const metadata: Metadata = {
   title: "PairUp",
   description: "Find meaningful connections",
+  icons: {
+    icon: PROJECT_LOGO_URL,
+    shortcut: PROJECT_LOGO_URL,
+    apple: PROJECT_LOGO_URL,
+  },
 };
 
 export default function RootLayout({
